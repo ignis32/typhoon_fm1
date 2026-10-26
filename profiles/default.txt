@@ -1,0 +1,10 @@
+# typhoon's default build: the engines it includes, one per line (engines/engines.h knows the names).
+# A profile is a choice of engines for a build: ./build.sh --profile NAME, or --engines a,b,c.
+sine
+analog
+noise
+fm
+fold
+vowel
+ers
+eva

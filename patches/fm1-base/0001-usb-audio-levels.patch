@@ -1,0 +1,164 @@
+typhoon patch on fm1-base: USB audio per direction, off / mute / on at a level, the recording's source
+SPDX-License-Identifier: MPL-2.0 (a change to fm1-base's MPL-2.0 files)
+
+What: plat_usb_audio_set(rec, rec_q12, play, play_q12, from) (include/plat.h). Each direction USB_AUDIO_OFF (not
+presented: felucca-bsp's usb_audio_switch, patches/felucca-bsp/0001), USB_AUDIO_MUTE (a level of 0) or
+USB_AUDIO_ON at its level, 0 .. 200 %; the recording either the mix (the playback in it) or the app alone. Once an
+app calls it the render runs at full level (as plat_usb_audio_full), the recording takes a scaled, saturated copy
+(device/main_fm1.c rec_tap, 2 KB in the pool), the playback is mixed at its own level, MASTER is the speaker's and
+the headphones' only, and the speaker's mix saturates. Without the call, nothing changes. The host simulator keeps
+what was asked (host_usb_audio) and renders as the FM-1 then does.
+Why: typhoon's USB AUDIO page (each direction OFF / MUTE / ON, its level; the recording MIX or SYNTH).
+Applies to: fm1-base ced9443. Needs patches/felucca-bsp/0001.
+Upstream: not offered yet (charlesvestal/fm1-base).
+
+diff --git a/device/main_fm1.c b/device/main_fm1.c
+index c31647b..19d1e8b 100644
+--- a/device/main_fm1.c
++++ b/device/main_fm1.c
+@@ -29,6 +29,21 @@ static uint32_t wdt_stage __attribute__((section(".noinit")));   /* the main loo
+                                                                   * 2 Bluetooth, 3 the app's loop, 4 USB, 5 a frame,
+                                                                   * 6 input (fm1b_dbg.stage) */
+ 
++#if FELUCCA_UAC
++/* the recording at its own level (plat_usb_audio_set): from a copy, so the speaker's is untouched; saturated */
++static int32_t rec_blk[2u * REND_FRAMES] PLAT_POOL;
++static void rec_tap(const int32_t *o)
++{
++    const float g = (float)uac_rec_q12 * (1.0f / 4096.0f);
++    uint32_t i;
++    for (i = 0; i < 2u * REND_FRAMES; i++) {
++        const float v = (float)o[i] * g;
++        rec_blk[i] = v > 8388607.0f ? 8388607 : v < -8388607.0f ? -8388607 : (int32_t)v;
++    }
++    uac_tap(rec_blk, REND_FRAMES);
++}
++#endif
++
+ static void render_block(int32_t *o)                /* ALNK0: one half, measured */
+ {
+     uint32_t t0 = fm1_ticks(), us, budget = HALF_FRAMES * 1000000u / FS;
+@@ -42,8 +57,9 @@ static void render_block(int32_t *o)                /* ALNK0: one half, measured
+     {
+         uint32_t k, gain = APP_GAIN(master_pos);
+ #if FELUCCA_UAC
+-        const int full = uac_full != 0;             /* USB audio full: the render at full level for the USB audio
+-                                                     * input, MASTER for the speaker after it (plat_usb_audio_full) */
++        const int full = uac_full != 0 || uac_set;  /* USB audio full: the render at full level for the USB audio
++                                                     * input, MASTER for the speaker after it (plat_usb_audio_full;
++                                                     * plat_usb_audio_set so too, the recording at its own level) */
+ #else
+         const int full = 0;
+ #endif
+@@ -61,18 +77,32 @@ static void render_block(int32_t *o)                /* ALNK0: one half, measured
+             }
+             if (radio_quiet)
+                 continue;
++#if FELUCCA_UAC
++            if (uac_set && uac_rec_app)
++                rec_tap(o + 2u * k);                /* the recording: the app alone, before the computer's audio */
++#endif
+ #if FELUCCA_UAC_OUT
+-            uac_play(o + 2u * k, REND_FRAMES, full ? 4096u : master_pos * master_pos >> 12);   /* the computer's audio,
+-                                                                                         * at MASTER */
++            uac_play(o + 2u * k, REND_FRAMES, uac_set ? uac_play_q12 : full ? 4096u : master_pos * master_pos >> 12);
++                                                    /* the computer's audio, at MASTER (or at its own level, MASTER
++                                                     * after it: plat_usb_audio_set) */
+ #endif
+ #if FELUCCA_UAC
+-            uac_tap(o + 2u * k, REND_FRAMES);       /* the USB audio input: the same master output */
++            if (!uac_set)
++                uac_tap(o + 2u * k, REND_FRAMES);   /* the USB audio input: the same master output */
++            else if (!uac_rec_app)
++                rec_tap(o + 2u * k);                /* the recording: the mix, at its own level */
+ #endif
+             if (full) {                             /* the speaker and headphones: MASTER after the tap */
+                 const float g = (float)gain * (1.0f / 4096.0f);
+                 uint32_t i;
+-                for (i = 0; i < 2u * REND_FRAMES; i++)
+-                    o[2u * k + i] = (int32_t)((float)o[2u * k + i] * g);
++                if (uac_set)                        /* (a level past 100 % may take the mix past 24 bits) */
++                    for (i = 0; i < 2u * REND_FRAMES; i++) {
++                        const float v = (float)o[2u * k + i] * g;
++                        o[2u * k + i] = v > 8388607.0f ? 8388607 : v < -8388607.0f ? -8388607 : (int32_t)v;
++                    }
++                else
++                    for (i = 0; i < 2u * REND_FRAMES; i++)
++                        o[2u * k + i] = (int32_t)((float)o[2u * k + i] * g);
+             }
+         }
+     }
+diff --git a/device/plat_fm1.c b/device/plat_fm1.c
+index 12ba4cd..2d207c1 100644
+--- a/device/plat_fm1.c
++++ b/device/plat_fm1.c
+@@ -200,6 +200,21 @@ void plat_host_patience(uint32_t try_ms, uint32_t total_ms)
+ /* USB audio full: the render at full level for the USB audio input, MASTER after it (main_fm1.c render_block) */
+ static volatile uint8_t uac_full;
+ void plat_usb_audio_full(int on) { uac_full = (uint8_t)(on != 0); }
++/* plat_usb_audio_set: the levels and the recording's source for render_block (main_fm1.c; MUTE is a level of 0),
++ * the streams presented for the USB descriptors (bsp chip/usb.c usb_audio_switch) */
++static volatile uint8_t uac_set, uac_rec_app;
++static volatile uint32_t uac_rec_q12 = 4096u, uac_play_q12 = 4096u;
++void plat_usb_audio_set(int rec, uint32_t rec_q12, int play, uint32_t play_q12, int from)
++{
++    uac_rec_q12 = rec == USB_AUDIO_ON ? (rec_q12 > 8192u ? 8192u : rec_q12) : 0u;
++    uac_play_q12 = play == USB_AUDIO_ON ? (play_q12 > 8192u ? 8192u : play_q12) : 0u;
++    uac_rec_app = (uint8_t)(from == USB_REC_APP);
++    RING_PUBLISH();
++    uac_set = 1;
++#if FELUCCA_UAC
++    usb_audio_switch((rec != USB_AUDIO_OFF ? 1u : 0u) | (play != USB_AUDIO_OFF ? 2u : 0u));
++#endif
++}
+ void plat_yield(void)
+ {
+     ble_poll();                                   /* Bluetooth: its notifications go out while the screen draws */
+diff --git a/host/plat_host.c b/host/plat_host.c
+index 902af1a..bd3578c 100644
+--- a/host/plat_host.c
++++ b/host/plat_host.c
+@@ -497,6 +497,20 @@ int plat_host_read(uint32_t addr, uint8_t *dst, uint32_t n) { (void)addr, (void)
+ void plat_host_patience(uint32_t try_ms, uint32_t total_ms) { (void)try_ms, (void)total_ms; }
+ static int uac_full;                            /* plat_usb_audio_full: the render at full level, MASTER after it */
+ void plat_usb_audio_full(int on) { uac_full = on != 0; }
++/* plat_usb_audio_set: no USB audio here; the render as the FM-1 does it then (at full level, MASTER after), and what
++ * was asked kept for an app's checks (rec, rec_q12, play, play_q12, from; host_usb_audio_calls: how often) */
++static int32_t host_usb_audio[5] = {USB_AUDIO_ON, 4096, USB_AUDIO_ON, 4096, USB_REC_MIX};
++static uint32_t host_usb_audio_calls;
++void plat_usb_audio_set(int rec, uint32_t rec_q12, int play, uint32_t play_q12, int from)
++{
++    host_usb_audio[0] = rec;
++    host_usb_audio[1] = (int32_t)rec_q12;
++    host_usb_audio[2] = play;
++    host_usb_audio[3] = (int32_t)play_q12;
++    host_usb_audio[4] = from;
++    host_usb_audio_calls++;
++    uac_full = 1;
++}
+ 
+ /* flash: one buffer per object, kept across a simulated reboot */
+ static uint8_t store[OBJ_NOBJ][PLAT_STORE_MAX];
+diff --git a/include/plat.h b/include/plat.h
+index b987a03..bc1e1b2 100644
+--- a/include/plat.h
++++ b/include/plat.h
+@@ -181,6 +181,18 @@ void plat_host_patience(uint32_t try_ms, uint32_t total_ms);   /* each try's wai
+  * speaker and headphones only; 0, both at MASTER (the default) */
+ void plat_usb_audio_full(int on);
+ 
++/* USB audio (FM1B_UAC), each direction on its own: the recording (the FM-1's sound, which the computer records) and
++ * the playback (the computer's sound through the FM-1, FM1B_UAC_OUT). Each USB_AUDIO_OFF: not presented to the
++ * computer at all (a change to or from OFF drops the FM-1 off USB for about a second, MIDI too, and the computer
++ * finds it again without that stream); USB_AUDIO_MUTE: presented, silent; USB_AUDIO_ON: at its level, Q12 (4096 =
++ * 100 %, up to 8192 = 200 %; the recording and the mix saturate). from: USB_REC_MIX, the recording has the playback
++ * in it (as the speaker has), USB_REC_APP, the app alone. Once an app calls it, the recording is at its own level and
++ * MASTER is the speaker's and the headphones' only (plat_usb_audio_full no longer counts). Call it in app_init with
++ * the saved setting, so the FM-1 comes up as it should (USB starts after app_init), and again when it changes. */
++enum { USB_AUDIO_OFF, USB_AUDIO_MUTE, USB_AUDIO_ON };
++enum { USB_REC_MIX, USB_REC_APP };
++void plat_usb_audio_set(int rec, uint32_t rec_q12, int play, uint32_t play_q12, int from);
++
+ /* the keys' velocity and pressure (an app with APP_KEY_SENSE): on, the scan reads the keys on the analog rows and
+  * hands each reading to the app (app_key_sample, app_key_probe); off by default */
+ void plat_sense(int on);

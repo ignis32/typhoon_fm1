@@ -1,0 +1,216 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: MPL-2.0
+     Copyright (C) 2026 ignis32
+     typhoon's preset editor: the sound that plays on the FM-1, live over USB-MIDI SysEx (core/sysex.c), and its preset
+     slots. The logic is core.mjs (tests/sim/webeditor.test.mjs runs it against the firmware compiled to wasm), the
+     page app.js. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>typhoon editor</title>
+<link rel="icon" href="data:,">
+<style>
+  /* the palette, light and dark */
+  :root { --room: #f4f2ec; --ink: #1c1d1f; --dim: #6b6964; --amber: #b86a06; --amber-ink: #fff;
+          --well: #ffffff; --line: #cfccc4; --rule: #e0ddd5; --card: #fbfaf6; --warn: #8a3b00; --warn-bg: #fff1e0;
+          --bad: #a3221b; --good: #1d6b3a; --track: #dcd8ce; color-scheme: light; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --room: #18191b; --ink: #e9e6de; --dim: #8c8a85; --amber: #f2a33a; --amber-ink: #2a1a03;
+      --well: #232427; --line: #3a3b3f; --rule: #2a2b2e; --card: #1e1f22; --warn: #f6c27a; --warn-bg: #2d2213;
+      --bad: #ff8a80; --good: #6fcf8f; --track: #34353a; color-scheme: dark; }
+  }
+  :root[data-theme="dark"] { --room: #18191b; --ink: #e9e6de; --dim: #8c8a85; --amber: #f2a33a; --amber-ink: #2a1a03;
+    --well: #232427; --line: #3a3b3f; --rule: #2a2b2e; --card: #1e1f22; --warn: #f6c27a; --warn-bg: #2d2213;
+    --bad: #ff8a80; --good: #6fcf8f; --track: #34353a; color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--room); color: var(--ink);
+               font: 14px/1.45 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+  main { max-width: 1440px; margin: 0 auto; padding: 16px 16px 40px; display: grid; gap: 14px; }
+  header { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: baseline; justify-content: space-between; }
+  h1 { font-size: 18px; font-weight: 600; margin: 0; }
+  h2 { font-size: 15px; font-weight: 600; margin: 0; }
+  h3 { font-size: 12px; font-weight: 700; letter-spacing: .06em; color: var(--dim); margin: 10px 0 4px; }
+  a { color: var(--ink); }
+  .dim { color: var(--dim); }
+  .links { display: flex; gap: 14px; font-size: 13px; }
+  section, .card { background: var(--card); border: 1px solid var(--rule); border-radius: 10px; padding: 12px 14px; min-width: 0; }
+  select, button, input { font: inherit; color: var(--ink); }
+  select, input[type=text], input[type=number] { background: var(--well); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; min-width: 0; }
+  button { background: var(--well); border: 1px solid var(--line); border-radius: 6px; padding: 4px 12px; cursor: pointer; }
+  button.go { background: var(--amber); border-color: var(--amber); color: var(--amber-ink); font-weight: 600; }
+  button:disabled, select:disabled, input:disabled { opacity: .45; cursor: default; }
+  a:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+  .grow { flex: 1 1 auto; }
+  .tag { display: inline-block; padding: 0 6px; border-radius: 4px; font-size: 11px; font-weight: 700; border: 1px solid currentColor; letter-spacing: .04em; }
+  .ok { color: var(--good); } .bad { color: var(--bad); } .warn { color: var(--warn); }
+  code { font: 12.5px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+  #bar { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center;
+         background: var(--card); border: 1px solid var(--rule); border-radius: 10px; padding: 8px 14px;
+         box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+  #now { font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  #now .edited { color: var(--amber); }
+  #busy { display: none; background: var(--warn-bg); color: var(--warn); border-radius: 6px; padding: 2px 10px; font-weight: 600; }
+  #busy.on { display: inline-block; }
+  #msg { min-height: 1.4em; font-weight: 600; }
+  .rule { border-left: 4px solid var(--amber); background: var(--warn-bg); border-radius: 0 10px 10px 0; padding: 8px 14px; margin: 0; }
+  .rule b { color: var(--warn); }
+  #lost { display: none; border-left: 4px solid var(--bad); background: var(--warn-bg); border-radius: 0 10px 10px 0; padding: 8px 14px; }
+  #lost.on { display: block; }
+
+  /* the editor: hidden until connected */
+  #editor { display: none; gap: 14px; }
+  #editor.on { display: grid; }
+  .layers { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+  .layer.ui { border-color: var(--amber); }
+  .layer .head { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+  .layer .head h2 { margin-right: 4px; }
+  .layer .head select.engine { font-weight: 600; }
+  .layer.off .body { opacity: .45; }
+  .groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+  .group .head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .group .head h2 { flex: 1 1 auto; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; padding: 2px 9px; font-size: 12px; font-weight: 700; background: var(--well); }
+  .seg button.on { background: var(--ink); color: var(--room); }
+  .group.global .ctls { opacity: .5; }
+  .group.gcopy { border-color: var(--amber); }
+  .group.gcopy .head h2::after { content: " · global copy"; color: var(--amber); font-weight: 600; }
+  .group.gcopy .ctls { opacity: 1; }
+  label.small { font-size: 12px; color: var(--dim); display: inline-flex; gap: 4px; align-items: center; cursor: pointer; }
+
+  /* a control: label | slider | value */
+  .ctl { display: grid; grid-template-columns: 84px minmax(60px, 1fr) 76px; gap: 8px; align-items: center; min-height: 28px; }
+  .ctl > .lab { font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ctl.blank > .lab { color: var(--dim); font-weight: 400; }
+  .ctl .val { font-size: 12.5px; text-align: right; font-variant-numeric: tabular-nums; cursor: text; white-space: nowrap;
+              overflow: hidden; text-overflow: ellipsis; border-radius: 4px; padding: 1px 3px; }
+  .ctl .val:hover { background: var(--well); }
+  .ctl .val.wait { color: var(--dim); }
+  .ctl input.type { width: 100%; text-align: right; padding: 1px 4px; }
+  .ctl select { width: 100%; }
+  .ctl.notdef > .lab::after { content: " •"; color: var(--amber); }
+  input[type=range] { width: 100%; accent-color: var(--amber); margin: 0; }
+  .ctl.wide { grid-template-columns: 84px minmax(0, 1fr); }
+
+  /* the slots */
+  .slots { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 4px; margin-top: 10px; }
+  @media (max-width: 900px) { .slots { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  .slot { text-align: left; padding: 3px 6px; border-radius: 6px; font-size: 12px; line-height: 1.3; min-width: 0; }
+  .slot b { font-variant-numeric: tabular-nums; margin-right: 4px; }
+  .slot span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .slot.user { border-color: var(--amber); }
+  .slot.empty { color: var(--dim); }
+  .slot.cur { background: var(--amber); color: var(--amber-ink); border-color: var(--amber); }
+  .tools { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 8px 18px; margin-top: 12px; }
+  .tools .row { gap: 6px 8px; }
+  .tools input[type=text] { width: 13ch; text-transform: uppercase; }
+  details summary { cursor: pointer; font-weight: 600; }
+  .globals { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 2px 18px; margin-top: 8px; }
+  dialog { background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px;
+           width: min(620px, calc(100vw - 32px)); }
+  dialog::backdrop { background: rgba(0, 0, 0, .5); }
+  dialog h3 { margin: 0 0 10px; font-size: 16px; color: var(--ink); letter-spacing: 0; }
+  dialog .row.end { justify-content: flex-end; margin-top: 16px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  td, th { padding: 3px 6px; border-bottom: 1px solid var(--rule); text-align: left; }
+  td input[type=number] { width: 5em; }
+  .help { font-size: 12.5px; color: var(--dim); }
+  .help kbd { font: 11.5px ui-monospace, monospace; border: 1px solid var(--line); border-radius: 3px; padding: 0 3px; }
+  footer { color: var(--dim); font-size: 12.5px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>typhoon editor <span class="dim" style="font-weight:400">the FM-1's sound and presets, live over USB-MIDI</span></h1>
+    <nav class="links"><a href="../">typhoon_fm1</a><a href="../install/">installer</a><a href="../sim/">simulator</a><a id="try-sim" href="?sim" title="the editor on the firmware running in this page (no FM-1, no sound)">try it without an FM-1</a></nav>
+  </header>
+  <p id="sim-note" class="rule" hidden><b>Sim:</b> the latest build's firmware runs in this page (no sound, nothing
+    kept after a reload): the controls, the presets and backups work on it as on an FM-1.</p>
+
+  <section>
+    <div class="row">
+      <label class="row" style="gap:6px">in <select id="in" aria-label="MIDI input from the FM-1"></select></label>
+      <label class="row" style="gap:6px">out <select id="out" aria-label="MIDI output to the FM-1"></select></label>
+      <button id="connect" class="go">Connect</button>
+      <button id="disconnect" hidden>Disconnect</button>
+      <span id="dev" class="dim">Chrome or Edge, the FM-1 on this computer's USB (typhoon from f65fb78 on), other MIDI apps closed.</span>
+    </div>
+  </section>
+
+  <div id="lost"><b class="bad">The FM-1 stopped answering.</b> <span id="lost-why" class="dim"></span>
+    <button id="reconnect">Connect again</button></div>
+
+  <div id="editor">
+    <div id="bar">
+      <span id="now">—</span>
+      <button id="save" class="go" title="what plays into its slot (as SAVE on the FM-1)">Save</button>
+      <button id="saveas" title="into a slot, with a name">Save as…</button>
+      <button id="savefree" title="into the first free slot, with this name">Save to next free</button>
+      <button id="revert" title="load the slot again: the edits are gone">Revert</button>
+      <span id="busy">waiting for silence (a note sounds on the FM-1)…</span>
+      <span id="msg" class="grow" role="status" aria-live="polite"></span>
+    </div>
+
+    <div class="layers" id="layers"></div>
+    <div class="groups" id="groups"></div>
+
+    <section>
+      <details id="globals-box">
+        <summary>Globals <span class="dim" style="font-weight:400">— not in a preset: the FM-1 keeps them for every preset</span></summary>
+        <div class="globals" id="globals"></div>
+      </details>
+    </section>
+
+    <section>
+      <div class="row"><h2>Presets</h2><span class="dim" id="list-info"></span>
+        <span class="grow"></span>
+        <label class="small"><input type="checkbox" id="ask-edits" checked> ask before a load drops edits</label>
+        <button id="relist" title="read the slots' names again">Refresh</button></div>
+      <div class="slots" id="slots"></div>
+      <div class="tools">
+        <div class="row"><b>Rename</b> slot <select id="rn-slot"></select> to <input type="text" id="rn-name" maxlength="12"> <button id="rename">Rename</button></div>
+        <div class="row"><b>Copy</b> <select id="cp-from"></select> to <select id="cp-to"></select> <button id="copy">Copy</button></div>
+        <div class="row"><b>Delete</b> <select id="dl-slot"></select> <button id="delete" title="the slot plays its factory preset again (or INIT)">Back to factory</button></div>
+        <div class="row"><b>Backup</b> <button id="backup" title="every user preset into a file (tools/presets.py's format)">Backup all</button>
+          <button id="restore" title="presets from a backup file into their slots (or others)">Restore…</button>
+          <input type="file" id="restore-file" accept=".json,application/json" hidden></div>
+      </div>
+    </section>
+
+    <p class="help">Sliders: drag, or <kbd>←</kbd><kbd>→</kbd> a step, <kbd>PgUp</kbd><kbd>PgDn</kbd> bigger steps, the mouse wheel
+      over a slider (<kbd>Shift</kbd>: ×10), double-click a control for its default, click a value (or <kbd>Enter</kbd> on it) to type one: the
+      parameter's raw number, as the tooltip shows its range; a list is a menu (arrows, or type its first letters). A dot after a label: not its default.
+      Edits play at once, as the knobs do; the FM-1's own knobs show here too. A sound group in <b>GLOBAL</b> uses the
+      global copy (dimmed); editing it makes it the preset's <b>OWN</b>, as on the FM-1. "global copy" edits the global
+      one itself (the GLO pages).</p>
+  </div>
+
+  <footer>typhoon is MPL-2.0, no warranty (this page:
+    <code>web/editor/</code>; the protocol <code>firmware/src/core/sysex.c</code>). M-VAVE and FM-1 are trademarks of their owners.</footer>
+</main>
+
+<dialog id="saveas-dlg">
+  <h3>Save as</h3>
+  <form method="dialog">
+    <div class="row">slot <select id="sa-slot"></select> name <input type="text" id="sa-name" maxlength="12" style="text-transform:uppercase"></div>
+    <p class="warn" id="sa-warn"></p>
+    <p class="help">Up to 12 of A-Z 0-9 space - . /</p>
+    <div class="row end"><button value="no">Cancel</button><button value="yes" class="go">Save</button></div>
+  </form>
+</dialog>
+
+<dialog id="restore-dlg">
+  <h3>Restore presets</h3>
+  <p class="dim" id="rs-info"></p>
+  <div style="max-height:50vh;overflow:auto"><table><thead><tr><th></th><th>in the file</th><th>name</th><th>into slot</th><th></th></tr></thead>
+    <tbody id="rs-rows"></tbody></table></div>
+  <form method="dialog"><div class="row end"><button value="no">Cancel</button><button value="yes" class="go">Write</button></div></form>
+</dialog>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

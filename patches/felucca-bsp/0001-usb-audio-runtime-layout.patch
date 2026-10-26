@@ -1,0 +1,239 @@
+typhoon patch on felucca-bsp: the USB audio streams presented, chosen at run time (chip/usb.c usb_audio_switch)
+SPDX-License-Identifier: MPL-2.0 (a change to felucca-bsp's MPL-2.0 file)
+
+What: the device presents both audio streams, the recording (EP4 IN) alone, the playback (EP4 OUT) alone, or
+neither (MIDI only), chosen at run time: usb_audio_switch, at boot before usb_start or later (a change while
+attached drops off the bus and usb_retry attaches again within a second, as usb_cdc_switch does). Each layout has
+its own bcdDevice low byte, as builds with other streams have, so a host that keeps what it learnt of a device
+reads it afresh. The interface numbers follow (the playback's is 2 when there is no recording); requests for a
+stream not presented stall. The console, when presented, keeps both (the layout as built). The layout as built is
+the default, byte for byte.
+Why: a player keeps the FM-1's audio off the computer unless wanted (Windows makes a new audio device its default).
+Applies to: felucca-bsp 4bd6d0b (as fm1-base ced9443 pins it in base/bsp).
+Upstream: not offered yet (hugelton/felucca-bsp).
+
+diff --git a/chip/usb.c b/chip/usb.c
+index bdf6769..e79cd1a 100644
+--- a/chip/usb.c
++++ b/chip/usb.c
+@@ -26,7 +26,11 @@
+  * FELUCCA_UAC_OUT=1 (with FELUCCA_UAC) adds a USB audio output too: the computer plays through the FM-1 (16-bit
+  * stereo, 44.1 kHz, EP4 OUT isochronous adaptive). uac_service takes each packet into a ring (nested in the render
+  * too); uac_play, after each render, adds it to the output, resampled to the I2S clock (~44,117.6 Hz): the ring's
+- * fill steers the rate, so it neither runs dry nor overflows. */
++ * fill steers the rate, so it neither runs dry nor overflows.
++ * Which of the two streams the device presents is chosen at run time too (usb_audio_switch, before usb_start or from
++ * a setting later: like usb_cdc_switch, a change while attached drops off the bus and usb_retry attaches again
++ * within a second): both, either, or neither (MIDI only), each layout with its own bcdDevice, so a host that keeps
++ * what it learnt of a device reads it afresh. With the console presented, both streams (the layout as built). */
+ #include "fm1_usb.h"   /* registers (chip/) */
+ #ifndef FELUCCA_CDC
+ #define FELUCCA_CDC 0
+@@ -313,14 +317,27 @@ static uint32_t midi_out_room(void)                  /* free slots in the out ri
+ #define FMT_LEN 0
+ #endif
+ #if FELUCCA_UAC
++/* the audio control interface of each layout (usb_audio_switch): its header lists the interfaces after it */
++#define D_AC_MIDI(a) 9, 4, (a), 0, 0, 1, 1, 0, 0, 9, 0x24, 1, 0x00, 0x01, 9, 0, 1, (a) + 1,   /* MIDI only */
++#define D_AC_REC(a)                                                                                  \
++    9, 4, (a), 0, 0, 1, 1, 0, 0,                                                                     \
++    10, 0x24, 1, 0x00, 0x01, 31, 0, 2, (a) + 1, (a) + 2,   /* AC header 1.00: MIDI + audio streaming */ \
++    12, 0x24, 2, 1, 0x03, 0x06, 0, 2, 0x03, 0x00, 0, 0,    /* input terminal 1: line, 2 ch (L R) */      \
++    9, 0x24, 3, 2, 0x01, 0x01, 0, 1, 0,                    /* output terminal 2: USB streaming, from 1 */
+ #if FELUCCA_UAC_OUT
+-#define D_AC(a)                                                                                      \
++#define D_AC_BOTH(a)                                                                                 \
+     9, 4, (a), 0, 0, 1, 1, 0, 0,                                                                     \
+     11, 0x24, 1, 0x00, 0x01, 53, 0, 3, (a) + 1, (a) + 2, (a) + 3,   /* AC header: MIDI, both streams */  \
+     12, 0x24, 2, 1, 0x03, 0x06, 0, 2, 0x03, 0x00, 0, 0,    /* input terminal 1: line, 2 ch (L R) */      \
+     9, 0x24, 3, 2, 0x01, 0x01, 0, 1, 0,                    /* output terminal 2: USB streaming, from 1 */ \
+     12, 0x24, 2, 3, 0x01, 0x01, 0, 2, 0x03, 0x00, 0, 0,    /* input terminal 3: USB streaming, 2 ch */   \
+     9, 0x24, 3, 4, 0x01, 0x03, 0, 3, 0,                    /* output terminal 4: speaker, from 3 */
++#define D_AC_PLAY(a)                                                                                 \
++    9, 4, (a), 0, 0, 1, 1, 0, 0,                                                                     \
++    10, 0x24, 1, 0x00, 0x01, 31, 0, 2, (a) + 1, (a) + 2,   /* AC header: MIDI, the output stream */      \
++    12, 0x24, 2, 3, 0x01, 0x01, 0, 2, 0x03, 0x00, 0, 0,    /* input terminal 3: USB streaming, 2 ch */   \
++    9, 0x24, 3, 4, 0x01, 0x03, 0, 3, 0,                    /* output terminal 4: speaker, from 3 */
++#define D_AC(a) D_AC_BOTH(a)
+ #define D_ASO(o)                                                                                     \
+     9, 4, (o), 0, 0, 1, 2, 0, 0,                           /* the output stream, alt 0: no bandwidth */ \
+     9, 4, (o), 1, 1, 1, 2, 0, 0,                           /* alt 1: the stream */                      \
+@@ -329,11 +346,7 @@ static uint32_t midi_out_room(void)                  /* free slots in the out ri
+     9, 5, 0x04, 0x09, UO_MAXP & 0xFF, UO_MAXP >> 8, 1, 0, 0,   /* EP4 OUT isochronous adaptive, 1 ms */ \
+     7, 0x25, 1, 0x00, 0, 0, 0,                             /* CS endpoint: no controls */
+ #else
+-#define D_AC(a)                                                                                      \
+-    9, 4, (a), 0, 0, 1, 1, 0, 0,                                                                     \
+-    10, 0x24, 1, 0x00, 0x01, 31, 0, 2, (a) + 1, (a) + 2,   /* AC header 1.00: MIDI + audio streaming */ \
+-    12, 0x24, 2, 1, 0x03, 0x06, 0, 2, 0x03, 0x00, 0, 0,    /* input terminal 1: line, 2 ch (L R) */      \
+-    9, 0x24, 3, 2, 0x01, 0x01, 0, 1, 0,                    /* output terminal 2: USB streaming, from 1 */
++#define D_AC(a) D_AC_REC(a)
+ #define D_ASO(o)
+ #endif
+ #define D_AS(s)                                                                                      \
+@@ -385,6 +398,53 @@ static uint32_t midi_out_room(void)                  /* free slots in the out ri
+ static const uint8_t DEV_DESC_PLAIN[18] = {D_DEV(0x0110, 0, 0, 0, 0)};
+ static const uint8_t CFG_DESC_PLAIN[] = {D_CFG(CFG_LEN_PLAIN, AUD_NIF), D_AUDIO(0)};
+ typedef char cfg_plain_len_ok[sizeof CFG_DESC_PLAIN == CFG_LEN_PLAIN ? 1 : -1];
++#if FELUCCA_UAC
++/* the other plain layouts (usb_audio_switch). usb_aud bit 0: the recording stream (EP4 IN), bit 1: the playback
++ * stream (EP4 OUT); the layout as built (both, or the recording alone without FELUCCA_UAC_OUT) is the one above.
++ * Each has its own bcdDevice low byte, as builds with other streams have (BCD_LO). */
++#define USB_AUD_ALL (1u | 2u * FELUCCA_UAC_OUT)
++#define CFG_LEN_A(r, p) (9 + 92 + (63 + FMT_LEN) * (r) + 74 * (p))
++#define BCD_LO_A(r, p) (0x10 * ((r) + (r) * FELUCCA_UAC_48K) + 0x40 * (p))
++#define D_DEV_A(r, p)                                                                                \
++    18, 1, 0x10, 0x01, 0, 0, 0, 64, 0x09, 0x12, FELUCCA_USB_PID & 0xFF, FELUCCA_USB_PID >> 8, BCD_LO_A(r, p), 0x03, \
++    1, 2, 0, 1
++typedef char bcd_as_built_ok[BCD_LO_A(1, FELUCCA_UAC_OUT) == BCD_LO(0) ? 1 : -1];
++static const uint8_t DEV_A0[18] = {D_DEV_A(0, 0)};   /* MIDI only */
++static const uint8_t CFG_A0[] = {D_CFG(CFG_LEN_A(0, 0), 2), D_AC_MIDI(0) D_MIDI(1)};
++typedef char cfg_a0_len_ok[sizeof CFG_A0 == CFG_LEN_A(0, 0) ? 1 : -1];
++#if FELUCCA_UAC_OUT
++static const uint8_t DEV_A1[18] = {D_DEV_A(1, 0)};   /* the recording alone */
++static const uint8_t CFG_A1[] = {D_CFG(CFG_LEN_A(1, 0), 3), D_AC_REC(0) D_MIDI(1) D_AS(2)};
++static const uint8_t DEV_A2[18] = {D_DEV_A(0, 1)};   /* the playback alone */
++static const uint8_t CFG_A2[] = {D_CFG(CFG_LEN_A(0, 1), 3), D_AC_PLAY(0) D_MIDI(1) D_ASO(2)};
++typedef char cfg_a1_len_ok[sizeof CFG_A1 == CFG_LEN_A(1, 0) ? 1 : -1];
++typedef char cfg_a2_len_ok[sizeof CFG_A2 == CFG_LEN_A(0, 1) ? 1 : -1];
++#endif
++static uint8_t usb_aud = USB_AUD_ALL;                    /* the streams presented without the console */
++static void usb_plain_desc(int cfg, const uint8_t **d, uint16_t *l)   /* the device (0) or configuration (1) */
++{
++    const uint8_t *dev = DEV_DESC_PLAIN, *conf = CFG_DESC_PLAIN;
++    uint16_t n = (uint16_t)sizeof CFG_DESC_PLAIN;
++    if (usb_aud == 0) {
++        dev = DEV_A0;
++        conf = CFG_A0;
++        n = (uint16_t)sizeof CFG_A0;
++    }
++#if FELUCCA_UAC_OUT
++    else if (usb_aud == 1u) {
++        dev = DEV_A1;
++        conf = CFG_A1;
++        n = (uint16_t)sizeof CFG_A1;
++    } else if (usb_aud == 2u) {
++        dev = DEV_A2;
++        conf = CFG_A2;
++        n = (uint16_t)sizeof CFG_A2;
++    }
++#endif
++    *d = cfg ? conf : dev;
++    *l = cfg ? n : 18u;
++}
++#endif
+ #if FELUCCA_CDC
+ #define CFG_LEN (9 + 8 + AUD_LEN + CDC_LEN)
+ #define USB_NIF (AUD_NIF + 2)
+@@ -423,8 +483,14 @@ static uint8_t usb_cdc_on = FELUCCA_CDC_DEFAULT != 0;      /* the console is pre
+ #define USB_CDC_ON 0
+ #define AUD_IF 0u
+ #endif
+-#define UAC_AS_IF (AUD_IF + 2u)
+-#define UAC_ASO_IF (AUD_IF + 3u)            /* the output stream (FELUCCA_UAC_OUT) */
++#if FELUCCA_UAC
++#define USB_AUD (USB_CDC_ON ? USB_AUD_ALL : usb_aud)   /* the streams presented now (usb_audio_switch) */
++#else
++#define USB_AUD 0u
++#endif
++#define UAC_AS_IF (AUD_IF + 2u)                         /* the recording stream, when presented (USB_AUD bit 0) */
++#define UAC_ASO_IF (AUD_IF + 2u + (USB_AUD & 1u))       /* the output stream (FELUCCA_UAC_OUT; USB_AUD bit 1): after the
++                                                         * recording's, or in its place */
+ static const uint8_t STR0[4] = {4, 3, 0x09, 0x04};
+ static const uint8_t STR1[] = {42, 3, 'H', 0, 0xFC, 0, 'g', 0, 'e', 0, 'l', 0, 't', 0, 'o', 0, 'n', 0, ' ', 0, 'I', 0,
+                                'n', 0, 's', 0, 't', 0, 'r', 0, 'u', 0, 'm', 0, 'e', 0, 'n', 0, 't', 0, 's', 0};
+@@ -461,10 +527,22 @@ static int get_desc(uint32_t wvalue, const uint8_t **d, uint16_t *l)
+ {
+     switch (wvalue >> 8) {
+     case 1:
++#if FELUCCA_UAC
++        if (!USB_CDC_ON) {                                  /* (the streams presented: usb_audio_switch) */
++            usb_plain_desc(0, d, l);
++            return 1;
++        }
++#endif
+         *d = USB_CDC_ON ? DEV_DESC : DEV_DESC_PLAIN;
+         *l = 18;
+         return 1;
+     case 2:
++#if FELUCCA_UAC
++        if (!USB_CDC_ON) {
++            usb_plain_desc(1, d, l);
++            return 1;
++        }
++#endif
+         *d = USB_CDC_ON ? CFG_DESC : CFG_DESC_PLAIN;
+         *l = (uint16_t)(USB_CDC_ON ? sizeof CFG_DESC : sizeof CFG_DESC_PLAIN);
+         return 1;
+@@ -781,14 +859,14 @@ static void ep0_service(void)
+         return;
+     case 0x010B:                                        /* SET_INTERFACE: alt 0 (alt 1 for the audio stream) */
+ #if FELUCCA_UAC
+-        if (s[4] == UAC_AS_IF && wvalue <= 1u && usb.config) {
++        if ((USB_AUD & 1u) && s[4] == UAC_AS_IF && wvalue <= 1u && usb.config) {
+             uac_ep4_reset();
+             uac_stream(wvalue);
+             goto ack;
+         }
+ #endif
+ #if FELUCCA_UAC_OUT
+-        if (s[4] == UAC_ASO_IF && wvalue <= 1u && usb.config) {
++        if ((USB_AUD & 2u) && s[4] == UAC_ASO_IF && wvalue <= 1u && usb.config) {
+             uo_ep4_reset();
+             uo_stream(wvalue);
+             goto ack;
+@@ -799,7 +877,7 @@ static void ep0_service(void)
+         goto stall;
+     case 0x810A:
+ #if FELUCCA_UAC
+-        if (s[4] == UAC_AS_IF) {
++        if ((USB_AUD & 1u) && s[4] == UAC_AS_IF) {
+             static uint8_t alt;
+             alt = uac.alt;
+             e0_send(&alt, 1, wlength);
+@@ -807,7 +885,7 @@ static void ep0_service(void)
+         }
+ #endif
+ #if FELUCCA_UAC_OUT
+-        if (s[4] == UAC_ASO_IF) {
++        if ((USB_AUD & 2u) && s[4] == UAC_ASO_IF) {
+             static uint8_t alt_o;
+             alt_o = uo.alt;
+             e0_send(&alt_o, 1, wlength);
+@@ -861,7 +939,7 @@ static void ep0_service(void)
+ #endif
+ #if FELUCCA_UAC
+     case 0x2201:                                        /* SET_CUR, endpoint: sampling frequency */
+-        if (s[4] != 0x84u || s[3] != 1u)
++        if (s[4] != 0x84u || s[3] != 1u || !(USB_AUD & 1u))
+             goto stall;
+         if (wlength) {
+             uac.e0_rx = 1;
+@@ -1649,3 +1727,27 @@ static __attribute__((unused)) void usb_cdc_switch(uint32_t on)
+     usb_cdc_on = (uint8_t)on;
+ }
+ #endif
++
++#if FELUCCA_UAC
++/* Present the audio streams (without the console; with it, both as built): bit 0 the recording (the FM-1's output,
++ * EP4 IN), bit 1 the playback (the host's audio through the FM-1, EP4 OUT; with FELUCCA_UAC_OUT), 0 MIDI alone.
++ * Main loop: at boot before usb_start, or later from a setting. As usb_cdc_switch, a change while attached drops off
++ * the bus; usb_retry attaches again within a second with the other descriptors, and the host enumerates afresh. */
++static __attribute__((unused)) void usb_audio_switch(uint32_t streams)
++{
++    streams &= USB_AUD_ALL;
++    if (streams == usb_aud)
++        return;
++    if (usb.up && !USB_CDC_ON) {
++        usb.up = 0;                                     /* usb_poll (TIMER5) stops before the SIE goes */
++        RING_PUBLISH();
++        fm1_usb_off();
++        usb.config = 0;
++    }
++    uac_stream(0);                                      /* no stream until the host chooses one again */
++#if FELUCCA_UAC_OUT
++    uo_stream(0);
++#endif
++    usb_aud = (uint8_t)streams;
++}
++#endif

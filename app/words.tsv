@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (C) 2026 ignis32
+# typhoon's words for a screen reader (fm1-reader): the text on the screen <TAB> what to say.
+# url: https://ignis32.github.io/typhoon_fm1/words/
+# (where a screen reader will fetch these, once published there; fm1-base's gen_words.py needs the line)
+TYPHOON	typhoon

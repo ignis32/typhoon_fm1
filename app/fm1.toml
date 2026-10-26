@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (C) 2026 ignis32
+# typhoon's build settings (fm1-base's tools/build.py, through ../build.sh)
+name = "TYPHOON_FM1"           # the build's files: typhoon_fm1.fwsc, typhoon_fm1-X.Y.fwsc (a release); the site's titles
+id_prefix = "FM-1_128"         # package identity: dev FM-1_12800, releases FM-1_128XXYYZZ (free on The Firmware Hub,
+                               # 2026-10-23: no identity starts with it, it starts with nobody's)
+usb_manufacturer = "typhoon"
+usb_product = "TYPHOON FM-1"
+ble_name = "TYPHOON"            # the name Bluetooth advertises (patches/fm1-base/0003: 8 characters at most)
+ble = true                     # Bluetooth MIDI: a computer or a phone connects (--no-ble leaves it out)
+ble_central = true             # and the FM-1 connects to a Bluetooth MIDI device: the re.corder
+words = "words.tsv"            # the screen reader's words (fm1-reader)
+include = ["../firmware/src", "../firmware/gen", "../build/engines"]   # typhoon itself: the layers, engines, presets, UI
+# the site
+tagline = "the voice of the Artinoise re.corder"
+repo = "https://github.com/ignis32/typhoon_fm1"
+licence = "MPL-2.0"
+credits = "Built on fm1-base (Charles Vestal) and felucca-bsp, from Felucca by Leo Kuroshita (Hügelton Instruments); engines ANALOG and NOISE from Felucca-Engines."
