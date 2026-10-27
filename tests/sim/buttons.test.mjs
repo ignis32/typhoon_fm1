@@ -26,4 +26,24 @@ export default function (t) {
   ex.sim_midi(0xB0, 2, 100); ex.sim_midi(0x90, 69, 100); run(200);
   const sounding = ex.sim_note(); hold(C.BTN_REC); run(50);
   check(sounding === 69 && ex.sim_note() === -1, `REC's hold: panic, every note off (${sounding} -> ${ex.sim_note()})`);
+
+  // OCT+ / OCT-: the transpose's splash, the value in big digits over the page (up orange, down blue), gone 1.2 s
+  // after the last press
+  const lit = (c) => {                            // pixels of colour c where the digits go (rows 84 .. 211; RGB565)
+    const fb = new Uint16Array(ex.memory.buffer, ex.sim_fb(), 240 * 240);
+    let n = 0;
+    for (let i = 84 * 240; i < 212 * 240; i++) if (fb[i] === c) n++;
+    return n;
+  };
+  const UP = ((255 >> 3) << 11) | ((150 >> 2) << 5) | (40 >> 3), DOWN = ((70 >> 3) << 11) | ((170 >> 2) << 5) | (255 >> 3);
+  const x0 = ex.sim_par_get(t.G(C.G_XPOSE));
+  t.press(C.BTN_OCT_UP); run(100);
+  const on = lit(UP), xp = ex.sim_par_get(t.G(C.G_XPOSE));
+  run(1400);
+  const gone = lit(UP);
+  t.press(C.BTN_OCT_DOWN); t.press(C.BTN_OCT_DOWN); run(100);
+  const down = lit(DOWN), xd = ex.sim_par_get(t.G(C.G_XPOSE));
+  check(xp === x0 + 1 && on > 1500 && gone < 100 && xd === x0 - 1 && down > 1500,
+    `OCT+ / OCT-: TRANSPOSE big on screen, ${xp} orange (${on} px), ${xd} blue (${down} px); the page back after 1.2 s (${gone})`);
+  t.press(C.BTN_OCT_UP); run(1400);
 }

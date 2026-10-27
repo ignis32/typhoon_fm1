@@ -41,6 +41,8 @@ static struct {
     uint32_t t_ask;
     char msg[24];
     uint32_t t_msg;
+    uint32_t t_splash;                             /* the transpose's splash: since when (0: none), the value drawn */
+    int16_t splash_drawn;
 } ui = {.drawn_page = 0xFFu, .full = 1};
 
 static void ui_msg(const char *s)
@@ -48,6 +50,66 @@ static void ui_msg(const char *s)
     name_set(ui.msg, s, sizeof ui.msg - 1u);
     ui.t_msg = fm1_ms | 1u;
     ui.hdr++;
+}
+
+/* OCT- / OCT+ (the transpose): the new value over the page, big enough to read at arm's length, for 1.2 s after the
+ * last press (ui_draw) */
+#define SPLASH_MS 1200u
+#define SPLASH_X 4                                 /* FONT_L x 4: 128 px high, "-24" 192 px wide */
+#define C_XP_UP RGB(255, 150, 40)                  /* transposed up: warm; down: cool (the splash, the status row) */
+#define C_XP_DOWN RGB(70, 170, 255)
+static uint16_t xpose_colour(int32_t v) { return v > 0 ? C_XP_UP : v < 0 ? C_XP_DOWN : C_DIM; }
+static void ui_splash(void)
+{
+    ui.t_splash = fm1_ms | 1u;
+    ui.splash_drawn = 0x7FFF;
+}
+
+/* text in f scaled sc times (each pixel a square, coverage over half: lit), centred on the screen at row y; drawn in
+ * strips through the canvas (it is 48 rows) */
+static void big_text(int32_t y, const felucca_font_t *f, uint32_t sc, const char *t, uint16_t c)
+{
+    int32_t x0 = 120 - text_w(f, t) * (int32_t)sc / 2, h = (int32_t)(f->h * sc), sy;
+    for (sy = 0; sy < h; sy += 48) {
+        int32_t x = x0, rows = h - sy < 48 ? h - sy : 48;
+        const char *q;
+        cv_begin(240, (uint32_t)rows, C_BLACK);
+        for (q = t; *q; q++) {
+            uint32_t gi = glyph(f, (uint8_t)*q), w = f->bw[gi], bpr = (w + 1u) / 2u, gx, gy;
+            const uint8_t *gd = f->data + f->off[gi];
+            for (gy = (uint32_t)sy / sc; gy < f->h && (int32_t)(gy * sc) < sy + rows; gy++)
+                for (gx = 0; gx < w; gx++) {
+                    uint32_t a = gd[gy * bpr + gx / 2u];
+                    a = (gx & 1u) ? (a & 15u) : (a >> 4);
+                    if (a >= 8u)
+                        cv_rect(x + ((int32_t)gx - f->pad) * (int32_t)sc, (int32_t)(gy * sc) - sy, (int32_t)sc,
+                                (int32_t)sc, c);
+                }
+            x += f->adv[gi] * (int32_t)sc;
+        }
+        cv_blit(0, (uint32_t)(y + sy));
+    }
+}
+
+static void draw_splash(void)
+{
+    char t[16], *e;
+    int32_t v = gpar[G_XPOSE], o = v / 12, st = v - o * 12;
+    lcd_fill(0, 56, 240, 184, C_BLACK);
+    draw_text_box(0, 60, 240, &FONT_S, "TRANSPOSE", C_GRAY, 1);
+    put_int(t, v, 1);
+    big_text(84, &FONT_L, SPLASH_X, t, xpose_colour(v));
+    if (!v)                                        /* the octaves and the semitones: +14 is "+1 OCT +2" */
+        put_str(t, "AS PLAYED");
+    else if (!o)
+        put_str(put_int(t, st, 1), st == 1 || st == -1 ? " SEMITONE" : " SEMITONES");
+    else {
+        e = put_int(t, o, 1);
+        put_str(e, st ? " OCT " : " OCT");
+        if (st)
+            put_int(e + 5, st, 1);
+    }
+    draw_text_box(0, 218, 240, &FONT_S, t, xpose_colour(v), 1);
 }
 
 /* a question on screen: the header asks it (amber), the status row says OCT- NO (left) / OCT+ YES (right) (ui_answer) */
@@ -171,10 +233,12 @@ static void ui_act(uint32_t i, uint32_t a)
         else
             v += BUTTONS[i].step * ((tp_in.buttons >> BTN_SEL & 1u) ? 12 : 1);
         par_set(G(G_XPOSE), v);
+        ui_splash();
         break;
     }
     case UA_XPOSE_OCT:                             /* (a hold of OCT- / OCT+) */
         par_set(G(G_XPOSE), gpar[G_XPOSE] + BUTTONS[i].step * 12);
+        ui_splash();
         break;
     case UA_MUTE:
         par_set(L(P_MUTE), !par_get(L(P_MUTE)));
@@ -539,7 +603,7 @@ static void draw_status(void)
     cv_text(6, 4, &FONT_S, s, perf_ui.gate ? C_WHITE : C_DIM);
     if (gpar[G_XPOSE]) {                           /* the transpose */
         put_int(s, gpar[G_XPOSE], 1);
-        cv_text(46, 4, &FONT_S, s, C_GLOBAL);
+        cv_text(46, 4, &FONT_S, s, xpose_colour(gpar[G_XPOSE]));
     }
     cv_rect(84, 8, 92, 8, C_LINE);                 /* the breath */
     cv_rect(84, 8, w, 8, C_HI);
@@ -720,7 +784,15 @@ static void ui_draw(void)
         ui.drawn_hdr = ui.hdr;
         draw_header();
     }
-    if (ui_typing()) {                             /* SAVE AS: the name instead of the page */
+    if (ui.t_splash && ms_since(ui.t_splash) < SPLASH_MS) {   /* the transpose's splash, over the page */
+        if (ui.splash_drawn != gpar[G_XPOSE]) {
+            ui.splash_drawn = gpar[G_XPOSE];
+            draw_splash();
+        }
+    } else if (ui.t_splash) {                      /* over: the page again, whole */
+        ui.t_splash = 0;
+        ui.full = 1;
+    } else if (ui_typing()) {                      /* SAVE AS: the name instead of the page */
         if (ui.nm_drawn != ui.nm_n) {
             ui.nm_drawn = ui.nm_n;
             draw_name();
