@@ -97,6 +97,7 @@ enum {
     G_BLE_C,                         /* BLE-C (app/ble.c): OFF, FIRST (the first Bluetooth MIDI device found), CHOOSE (the
                                       * one chosen in the BLUETOOTH page's list) */
     G_BLE_AUTO,                      /* AUTO_RECONNECT: OFF (one look), ON (looks whenever no device is connected) */
+    G_USB_HOST,                      /* USB HOST (app/usbhost.c): OFF (a computer), ON (a USB MIDI device: the re.corder) */
     G_COUNT                          /* (new ones at the end: the saved state has room for G_SAVED) */
 };
 #define G_SAVED 24                                 /* (16 until 2026-10-24, 12 until 2026-10-23: the state 0x7A08 on) */

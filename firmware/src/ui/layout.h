@@ -29,7 +29,7 @@ enum {
     PG_MIX,
     PG_GLOBAL, PG_BT, PG_TILT, PG_G_CURVE, PG_G_LP, PG_G_DRIVE, PG_G_DETUNE, PG_G_DELAY, PG_G_REVERB,
     PG_REVERB2, PG_G_REVERB2, PG_G_BREATH, PG_TONE, PG_ENG3, PG_ENG4, PG_LEAP,
-    PG_USB,                                       /* (new pages at the end: the others keep their numbers) */
+    PG_USB, PG_USBH,                              /* (new pages at the end: the others keep their numbers) */
     NPAGES
 };
 #define PG_STAY 0xFFu
@@ -60,8 +60,9 @@ static const ui_page_t PAGES[NPAGES] = {
     [PG_G_CURVE] = {"CURVE", UK_CURVE, 0, PG_LEAP, {SG(S_BC_LO), SG(S_BC_HI), SG(S_BC_SHAPE), PR_NONE}},   /* (the global
                                                   * curve: how breath is read, beside BREATH IN) */
     [PG_LEAP] = {"LEAPS", UK_KNOBS, 0, PG_USB, {G(G_LEAP_MODE), G(G_LEAP_ST), G(G_LEAP_MS), PR_NONE}},   /* (core/leap.c) */
-    [PG_USB] = {"USB AUDIO", UK_KNOBS, 0, PG_GLOBAL, {G(G_USB_IN), G(G_USB_IN_LV), G(G_USB_OUT), G(G_USB_OUT_LV)}},
+    [PG_USB] = {"USB AUDIO", UK_KNOBS, 0, PG_USBH, {G(G_USB_IN), G(G_USB_IN_LV), G(G_USB_OUT), G(G_USB_OUT_LV)}},
                                                   /* (app/usbaudio.c) */
+    [PG_USBH] = {"USB HOST", UK_KNOBS, 0, PG_GLOBAL, {G(G_USB_HOST), PR_NONE, PR_NONE, PR_NONE}},   /* (app/usbhost.c) */
     /* the global effects (what a preset without its own group plays): REC, apart from GLO's settings (2026-10-24) */
     [PG_G_LP] = {"BREATH LP", UK_KNOBS, 0, PG_G_DRIVE, {SG(S_LPF), SG(S_LPRES), SG(S_BR_LP), PR_NONE}},
     [PG_G_DRIVE] = {"DRIVE", UK_KNOBS, 0, PG_G_DETUNE, {SG(S_DRIVE), SG(S_DRV_AT), PR_NONE, PR_NONE}},

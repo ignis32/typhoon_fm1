@@ -41,6 +41,12 @@ on the computer, each OFF (the default: the computer gets no such audio device, 
 alone. MASTER is the speaker's and the headphones' volume only. A change to or from OFF applies once the knob rests:
 the FM-1 drops off USB for about a second (MIDI too) and comes back with the other audio devices.
 
+**USB host** (GLO → USB HOST): ON makes the FM-1's USB port a host for a USB MIDI device, such as the re.corder by
+cable, plugged in directly or behind one hub. The FM-1 does not power the port, so use a powered hub or a powered OTG
+adapter. While it is ON, no computer can use that port: no USB audio, and no editor or installer over USB. Turn it
+OFF to get them back, or hold REC at power-on to enter update mode. The setting is saved; the FM-1 starts as a USB
+device and switches to host on its first frame. OFF by default. Untested on an FM-1 yet.
+
 **The sound.** A preset is the whole sound: three layers (engine and its knobs, level, transpose, pan, envelope, how
 breath moves them) and a name. The sound after the layers (breath curve, breath LP, drive, detune, delay, reverb,
 volume) is in groups: each has a **global** copy (the curve on GLO beside BREATH IN, the effects on REC; an amber
@@ -61,7 +67,7 @@ the page's button gives it back to the global one.
 | LFO | ENVELOPE (per layer, drawn): ATTACK, DECAY, SUSTAIN, RELEASE → ENVELOPE + (DELAY, BR>AMP). Restarts on a fresh attack, legato runs on |
 | ARP | LAYER (engine, level, transpose, pan) → BREATH (breath → tone / shape, filter type, fine) |
 | SEQ | MIX: the 3 levels, each with its engine, and the preset's VOLUME (KNOB 4: the whole sound, effects too; 100 = as it is) · hold: VOLUME back to global |
-| GLO | the global settings: GLOBAL (breath source, bend, transpose) → BLUETOOTH (BLE-P, BLE-C, the list, AUTO_RECONNECT) → TILT>BEND → BREATH IN (BREATH CC, LOUDNESS) → CURVE (the global breath curve) → LEAPS → USB AUDIO · hold: GLOBAL TO FACTORY ? |
+| GLO | the global settings: GLOBAL (breath source, bend, transpose) → BLUETOOTH (BLE-P, BLE-C, the list, AUTO_RECONNECT) → TILT>BEND → BREATH IN (BREATH CC, LOUDNESS) → CURVE (the global breath curve) → LEAPS → USB AUDIO → USB HOST · hold: GLOBAL TO FACTORY ? |
 | REC | the global effects: BREATH LP → DRIVE → DETUNE → DELAY → REVERB → REVERB + (what a preset without its own group plays) · hold: all notes off |
 | OCT− / OCT+ | press: transpose a semitone (when let go) · hold: an octave (or SEL + press) · both: 0. Cuts the sounding note |
 | PLAY | mute the layer · hold: solo it (again: back; PLAY blinks meanwhile) |

@@ -10,6 +10,7 @@ export default function (t) {
     playLv: ex.sim_usb_audio(3), from: ex.sim_usb_audio(4), calls: ex.sim_usb_audio(5) });
   const set = (g, v) => ex.sim_par_set(G(g), v);
 
+  check(ex.sim_par_get(G(C.G_USB_HOST)) === 0, 'USB HOST: OFF by default (a computer: the editor, the installer)');
   let a = asked();
   check(ex.sim_par_get(G(C.G_USB_IN)) === 0 && ex.sim_par_get(G(C.G_USB_OUT)) === 0 && a.calls >= 1 && a.rec === OFF && a.play === OFF,
     `USB AUDIO: OFF both ways by default, so at power-on (asked ${a.calls}x: rec ${a.rec}, play ${a.play})`);

@@ -164,6 +164,7 @@ static void midi_send(uint32_t st, uint32_t d1, uint32_t d2)
 #include "core/presets.c"
 #include "ble.c"                                   /* app/ble.c: Bluetooth (BLE-P, BLE-C) for the UI, on plat_ble_* */
 #include "usbaudio.c"                              /* app/usbaudio.c: GLOBAL > USB AUDIO, on plat_usb_audio_set */
+#include "usbhost.c"                               /* app/usbhost.c: GLOBAL > USB HOST, on plat_usb_host */
 #include "ui/layout.h"
 #include "ui/ui.c"
 #include "core/sysex.c"
@@ -315,6 +316,7 @@ void app_frame(void)
     ui_input();
     bt_poll();                                     /* Bluetooth's mode and the device it looks for (app/ble.c) */
     ua_poll();                                     /* USB AUDIO: levels at once, to or from OFF once the knob rests */
+    uhost_poll();                                   /* USB HOST: on or off once the knob rests; its news on the screen */
     if (gpar[G_XPOSE] != app.xpose) {              /* transposed: the sounding note is cut, the next one is in the */
         app.xpose = gpar[G_XPOSE];                 /* new key (notes are kept by the number that came in) */
         perf_cut();

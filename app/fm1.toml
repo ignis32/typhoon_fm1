@@ -9,6 +9,7 @@ usb_product = "TYPHOON FM-1"
 ble_name = "TYPHOON"            # the name Bluetooth advertises (patches/fm1-base/0003: 8 characters at most)
 ble = true                     # Bluetooth MIDI: a computer or a phone connects (--no-ble leaves it out)
 ble_central = true             # and the FM-1 connects to a Bluetooth MIDI device: the re.corder
+usb_host = true                # GLOBAL > USB HOST: the re.corder by cable, through a powered hub (app/usbhost.c)
 install_app = "install_app.js"  # the installer's step before an install: the user presets saved to a file first
 words = "words.tsv"            # the screen reader's words (fm1-reader)
 include = ["../firmware/src", "../firmware/gen", "../build/engines"]   # typhoon itself: the layers, engines, presets, UI

@@ -118,6 +118,7 @@ static const param_desc_t GLOBAL[G_COUNT] = {
     [G_BLE_C] = {"BLE-C", F_ENUM, 0, 0, 0, N_BLE_C, 0},
     [G_BLE_AUTO] = {"AUTO_RECONNECT", F_ONOFF, 0, 0, 0, 0, 0},
 #endif
+    [G_USB_HOST] = {"USB HOST", F_ONOFF, 0, 1, 0, 0, 0},     /* (OFF by default: a computer, the editor, the installer) */
 };
 
 static uint32_t par_dirty;                         /* bumped by every change: the UI redraws, storage saves */
