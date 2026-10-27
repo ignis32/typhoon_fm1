@@ -112,7 +112,7 @@ static const param_desc_t GLOBAL[G_COUNT] = {
     [G_USB_OUT] = {"USB OUT", F_ENUM, 0, 3, 0, N_USB_OUT, 0},
     [G_USB_OUT_LV] = {"OUT LEVEL", F_INT, 0, 200, 100, 0, "%"},
 #if TYPHOON_BLE
-    [G_BLE_C] = {"BLE-C", F_ENUM, 0, 2, 2, N_BLE_C, 0},          /* (CHOOSE: the re.corder, once chosen) */
+    [G_BLE_C] = {"BLE-C", F_ENUM, 0, 2, 1, N_BLE_C, 0},          /* (FIRST: the first Bluetooth MIDI device found) */
     [G_BLE_AUTO] = {"AUTO_RECONNECT", F_ONOFF, 0, 1, 1, 0, 0},
 #else
     [G_BLE_C] = {"BLE-C", F_ENUM, 0, 0, 0, N_BLE_C, 0},

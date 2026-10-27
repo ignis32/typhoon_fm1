@@ -9,11 +9,13 @@ export default function (t) {
   const str = (p) => { const m = new Uint8Array(ex.memory.buffer); let e = p; while (m[e]) e++; return new TextDecoder().decode(m.subarray(p, e)); };
   const word = (i) => str(ex.sim_ble_text(i));
   const knob3 = (n) => { ex.sim_enc(C.ENC_KNOB1 + 2, n); run(60); };
-  ex.sim_page(C.PG_BT); run(1500);
+  ex.sim_page(C.PG_BT); run(3000);                               // (BLE-C FIRST: the settle, the scan, the link)
 
-  check(ex.sim_par_get(G(C.G_BLE_P)) === 1 && ex.sim_par_get(G(C.G_BLE_C)) === 2 && ex.sim_par_get(G(C.G_BLE_AUTO)) === 1 &&
-    ex.sim_ble(0) === READY && ex.sim_ble(1) === DEV_OFF && /NONE CHOSEN/.test(word(1)) && /VISIBLE AS TYPHOON/.test(word(0)),
-    `BLE defaults: BLE-P ON, BLE-C CHOOSE, AUTO_RECONNECT ON; nothing chosen, no scan (${word(0)} / ${word(1)})`);
+  check(ex.sim_par_get(G(C.G_BLE_P)) === 1 && ex.sim_par_get(G(C.G_BLE_C)) === 1 && ex.sim_par_get(G(C.G_BLE_AUTO)) === 1 &&
+    ex.sim_ble(0) === READY && ex.sim_ble(1) === DEV_READY && /CONNECTED BLE MIDI/.test(word(1)) && /VISIBLE AS TYPHOON/.test(word(0)),
+    `BLE defaults: BLE-P ON, BLE-C FIRST, AUTO_RECONNECT ON; the first device found, connected (${word(0)} / ${word(1)})`);
+
+  ex.sim_par_set(G(C.G_BLE_C), 2); run(300);                      // (CHOOSE: the link up stays; the list picks one)
 
   knob3(1); run(700);
   const listed = ex.sim_ble(4);
