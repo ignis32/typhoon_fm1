@@ -9,14 +9,14 @@ app calls it the render runs at full level (as plat_usb_audio_full), the recordi
 the headphones' only, and the speaker's mix saturates. Without the call, nothing changes. The host simulator keeps
 what was asked (host_usb_audio) and renders as the FM-1 then does.
 Why: typhoon's USB AUDIO page (each direction OFF / MUTE / ON, its level; the recording MIX or SYNTH).
-Applies to: fm1-base ced9443. Needs patches/felucca-bsp/0001.
+Applies to: fm1-base 934e40d. Needs patches/felucca-bsp/0001.
 Upstream: not offered yet (charlesvestal/fm1-base).
 
 diff --git a/device/main_fm1.c b/device/main_fm1.c
-index c31647b..19d1e8b 100644
+index ecac760..e65f3ad 100644
 --- a/device/main_fm1.c
 +++ b/device/main_fm1.c
-@@ -29,6 +29,21 @@ static uint32_t wdt_stage __attribute__((section(".noinit")));   /* the main loo
+@@ -31,6 +31,21 @@ static uint32_t wdt_stage __attribute__((section(".noinit")));   /* the main loo
                                                                    * 2 Bluetooth, 3 the app's loop, 4 USB, 5 a frame,
                                                                    * 6 input (fm1b_dbg.stage) */
  
@@ -38,7 +38,7 @@ index c31647b..19d1e8b 100644
  static void render_block(int32_t *o)                /* ALNK0: one half, measured */
  {
      uint32_t t0 = fm1_ticks(), us, budget = HALF_FRAMES * 1000000u / FS;
-@@ -42,8 +57,9 @@ static void render_block(int32_t *o)                /* ALNK0: one half, measured
+@@ -44,8 +59,9 @@ static void render_block(int32_t *o)                /* ALNK0: one half, measured
      {
          uint32_t k, gain = APP_GAIN(master_pos);
  #if FELUCCA_UAC
@@ -50,7 +50,7 @@ index c31647b..19d1e8b 100644
  #else
          const int full = 0;
  #endif
-@@ -61,18 +77,32 @@ static void render_block(int32_t *o)                /* ALNK0: one half, measured
+@@ -63,18 +79,32 @@ static void render_block(int32_t *o)                /* ALNK0: one half, measured
              }
              if (radio_quiet)
                  continue;
@@ -89,7 +89,7 @@ index c31647b..19d1e8b 100644
          }
      }
 diff --git a/device/plat_fm1.c b/device/plat_fm1.c
-index 12ba4cd..2d207c1 100644
+index 48477b9..cc737e1 100644
 --- a/device/plat_fm1.c
 +++ b/device/plat_fm1.c
 @@ -200,6 +200,21 @@ void plat_host_patience(uint32_t try_ms, uint32_t total_ms)
@@ -115,10 +115,10 @@ index 12ba4cd..2d207c1 100644
  {
      ble_poll();                                   /* Bluetooth: its notifications go out while the screen draws */
 diff --git a/host/plat_host.c b/host/plat_host.c
-index 902af1a..bd3578c 100644
+index 0edc269..6839a58 100644
 --- a/host/plat_host.c
 +++ b/host/plat_host.c
-@@ -497,6 +497,20 @@ int plat_host_read(uint32_t addr, uint8_t *dst, uint32_t n) { (void)addr, (void)
+@@ -507,6 +507,20 @@ int plat_host_read(uint32_t addr, uint8_t *dst, uint32_t n) { (void)addr, (void)
  void plat_host_patience(uint32_t try_ms, uint32_t total_ms) { (void)try_ms, (void)total_ms; }
  static int uac_full;                            /* plat_usb_audio_full: the render at full level, MASTER after it */
  void plat_usb_audio_full(int on) { uac_full = on != 0; }
@@ -140,10 +140,10 @@ index 902af1a..bd3578c 100644
  /* flash: one buffer per object, kept across a simulated reboot */
  static uint8_t store[OBJ_NOBJ][PLAT_STORE_MAX];
 diff --git a/include/plat.h b/include/plat.h
-index b987a03..bc1e1b2 100644
+index 68b7d21..13142d9 100644
 --- a/include/plat.h
 +++ b/include/plat.h
-@@ -181,6 +181,18 @@ void plat_host_patience(uint32_t try_ms, uint32_t total_ms);   /* each try's wai
+@@ -195,6 +195,18 @@ void plat_host_patience(uint32_t try_ms, uint32_t total_ms);   /* each try's wai
   * speaker and headphones only; 0, both at MASTER (the default) */
  void plat_usb_audio_full(int on);
  

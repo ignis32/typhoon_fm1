@@ -37,7 +37,8 @@ whether it has been offered upstream. Patched files are MPL-2.0 as the originals
 | Patch | What |
 | --- | --- |
 | `felucca-bsp/0001-usb-audio-runtime-layout.patch` | the USB audio streams presented chosen at run time: both, either, or none (MIDI only) |
-| `felucca-bsp/0002-radio-power.patch` | `fm1_radio_power`: the radio's DC-DC and supplies as V15 leaves them (without it, Bluetooth's start crashes after a power cycle) |
 | `fm1-base/0001-usb-audio-levels.patch` | `plat_usb_audio_set`: each USB audio direction OFF / MUTE / ON at 0 .. 200 %, the recording the mix or the app alone (GLOBAL > USB AUDIO) |
-| `fm1-base/0002-radio-power.patch` | `fm1_radio_power` at boot, and the four registers in the Bluetooth log at every radio start |
-| `fm1-base/0003-ble-advertise-name.patch` | `plat_ble_advertise`: advertising on / off apart from the central (BLE-P, BLE-C); fm1.toml `ble_name`: the name advertised (TYPHOON) |
+| `fm1-base/0003-ble-advertise-name.patch` | `plat_ble_advertise`: advertising on / off apart from the central (BLE-P, BLE-C); fm1.toml `ble_name`: the name advertised (TYPHOON, "TYPHOON 1F2D" in full) |
+
+Taken upstream (deleted here): the radio power fix (`felucca-bsp/0002-radio-power.patch`, `fm1-base/0002-radio-power.patch`)
+is felucca-bsp's `fm1_power_stock`, which fm1-base calls at the start since 5e1e79f (typhoon on fm1-base 934e40d).

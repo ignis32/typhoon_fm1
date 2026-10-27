@@ -25,8 +25,8 @@ The version is in `VERSION` (every build carries it: the header at power-on, Sys
 
 ## Playing it
 
-**The link.** GLO → BLUETOOTH, two sides on their own: **BLE-P** (KNOB 1) ON lets a computer or phone find "TYPHOON"
-and connect; **BLE-C** (KNOB 2) connects the FM-1 to a Bluetooth MIDI device: OFF, FIRST (the default: the first it finds), CHOOSE
+**The link.** GLO → BLUETOOTH, two sides on their own: **BLE-P** (KNOB 1) ON lets a computer or phone find "TYPHOON 1F2D"
+(four hex digits of each FM-1's own, so two are told apart) and connect; **BLE-C** (KNOB 2) connects the FM-1 to a Bluetooth MIDI device: OFF, FIRST (the default: the first it finds), CHOOSE
 (the one you picked). KNOB 3 opens the list of devices around: REFRESH, the devices (the remembered one
 marked `*`, the signal in bars), FORGET; OCT+ takes the entry, OCT- shuts the list. **AUTO_RECONNECT** (KNOB 4) ON:
 whenever no device is connected (power-on, one gone) it looks until one is; OFF: one look. Under each side its state

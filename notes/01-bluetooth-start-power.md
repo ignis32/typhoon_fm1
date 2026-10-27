@@ -11,8 +11,11 @@ switching it on and off several times (2026-10-16); still to do: many more power
 and playing through it.
 
 Found on typhoon's earlier platform (fm1-ctl's Bluetooth shim). typhoon now runs on fm1-base and felucca-bsp, where
-the same fix is `fm1_radio_power` (felucca-bsp's `include/fm1_sys.h`), added by typhoon's
-`patches/felucca-bsp/0002-radio-power.patch` and called at boot by `patches/fm1-base/0002-radio-power.patch`.
+the same fix was `fm1_radio_power` (felucca-bsp's `chip/fm1_sys.h`), added by typhoon's patches
+`felucca-bsp/0002-radio-power.patch` and `fm1-base/0002-radio-power.patch`. Since fm1-base 934e40d (2026-10-27) it
+is upstream's: felucca-bsp's `fm1_power_stock` (a449b48), called at the start by fm1-base (5e1e79f), sets these four
+registers and the rest of M-VAVE's power setup (VDDIO 3.2 V, WiFi's regulator automatic); the log's
+`power boot ... fix N` line says what the start found. typhoon dropped its two patches then.
 
 If you run JieLi's BT libraries on an FM-1 without JieLi's OS and Bluetooth only works "sometimes", or "until the
 next power cycle", check these registers first.

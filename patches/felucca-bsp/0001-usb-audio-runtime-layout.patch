@@ -9,27 +9,25 @@ reads it afresh. The interface numbers follow (the playback's is 2 when there is
 stream not presented stall. The console, when presented, keeps both (the layout as built). The layout as built is
 the default, byte for byte.
 Why: a player keeps the FM-1's audio off the computer unless wanted (Windows makes a new audio device its default).
-Applies to: felucca-bsp 4bd6d0b (as fm1-base ced9443 pins it in base/bsp).
+Applies to: felucca-bsp 2cd696a (as fm1-base 934e40d pins it in base/bsp).
 Upstream: not offered yet (hugelton/felucca-bsp).
 
 diff --git a/chip/usb.c b/chip/usb.c
-index bdf6769..e79cd1a 100644
+index a1e03a5..257dfc8 100644
 --- a/chip/usb.c
 +++ b/chip/usb.c
-@@ -26,7 +26,11 @@
-  * FELUCCA_UAC_OUT=1 (with FELUCCA_UAC) adds a USB audio output too: the computer plays through the FM-1 (16-bit
+@@ -28,6 +28,10 @@
   * stereo, 44.1 kHz, EP4 OUT isochronous adaptive). uac_service takes each packet into a ring (nested in the render
   * too); uac_play, after each render, adds it to the output, resampled to the I2S clock (~44,117.6 Hz): the ring's
-- * fill steers the rate, so it neither runs dry nor overflows. */
-+ * fill steers the rate, so it neither runs dry nor overflows.
+  * fill steers the rate, so it neither runs dry nor overflows.
 + * Which of the two streams the device presents is chosen at run time too (usb_audio_switch, before usb_start or from
 + * a setting later: like usb_cdc_switch, a change while attached drops off the bus and usb_retry attaches again
 + * within a second): both, either, or neither (MIDI only), each layout with its own bcdDevice, so a host that keeps
-+ * what it learnt of a device reads it afresh. With the console presented, both streams (the layout as built). */
++ * what it learnt of a device reads it afresh. With the console presented, both streams (the layout as built).
+  * FELUCCA_USB_HOST=1 adds opt-in MIDI host mode; see docs/USB_HOST.md for the main-loop contract. */
  #include "fm1_usb.h"   /* registers (chip/) */
- #ifndef FELUCCA_CDC
- #define FELUCCA_CDC 0
-@@ -313,14 +317,27 @@ static uint32_t midi_out_room(void)                  /* free slots in the out ri
+ /* Host is opt-in and excluded from update loaders, even with a global build flag. */
+@@ -329,14 +333,27 @@ static uint32_t midi_out_room(void)                  /* free slots in the out ri
  #define FMT_LEN 0
  #endif
  #if FELUCCA_UAC
@@ -58,7 +56,7 @@ index bdf6769..e79cd1a 100644
  #define D_ASO(o)                                                                                     \
      9, 4, (o), 0, 0, 1, 2, 0, 0,                           /* the output stream, alt 0: no bandwidth */ \
      9, 4, (o), 1, 1, 1, 2, 0, 0,                           /* alt 1: the stream */                      \
-@@ -329,11 +346,7 @@ static uint32_t midi_out_room(void)                  /* free slots in the out ri
+@@ -345,11 +362,7 @@ static uint32_t midi_out_room(void)                  /* free slots in the out ri
      9, 5, 0x04, 0x09, UO_MAXP & 0xFF, UO_MAXP >> 8, 1, 0, 0,   /* EP4 OUT isochronous adaptive, 1 ms */ \
      7, 0x25, 1, 0x00, 0, 0, 0,                             /* CS endpoint: no controls */
  #else
@@ -71,7 +69,7 @@ index bdf6769..e79cd1a 100644
  #define D_ASO(o)
  #endif
  #define D_AS(s)                                                                                      \
-@@ -385,6 +398,53 @@ static uint32_t midi_out_room(void)                  /* free slots in the out ri
+@@ -401,6 +414,53 @@ static uint32_t midi_out_room(void)                  /* free slots in the out ri
  static const uint8_t DEV_DESC_PLAIN[18] = {D_DEV(0x0110, 0, 0, 0, 0)};
  static const uint8_t CFG_DESC_PLAIN[] = {D_CFG(CFG_LEN_PLAIN, AUD_NIF), D_AUDIO(0)};
  typedef char cfg_plain_len_ok[sizeof CFG_DESC_PLAIN == CFG_LEN_PLAIN ? 1 : -1];
@@ -125,7 +123,7 @@ index bdf6769..e79cd1a 100644
  #if FELUCCA_CDC
  #define CFG_LEN (9 + 8 + AUD_LEN + CDC_LEN)
  #define USB_NIF (AUD_NIF + 2)
-@@ -423,8 +483,14 @@ static uint8_t usb_cdc_on = FELUCCA_CDC_DEFAULT != 0;      /* the console is pre
+@@ -439,8 +499,14 @@ static uint8_t usb_cdc_on = FELUCCA_CDC_DEFAULT != 0;      /* the console is pre
  #define USB_CDC_ON 0
  #define AUD_IF 0u
  #endif
@@ -142,7 +140,7 @@ index bdf6769..e79cd1a 100644
  static const uint8_t STR0[4] = {4, 3, 0x09, 0x04};
  static const uint8_t STR1[] = {42, 3, 'H', 0, 0xFC, 0, 'g', 0, 'e', 0, 'l', 0, 't', 0, 'o', 0, 'n', 0, ' ', 0, 'I', 0,
                                 'n', 0, 's', 0, 't', 0, 'r', 0, 'u', 0, 'm', 0, 'e', 0, 'n', 0, 't', 0, 's', 0};
-@@ -461,10 +527,22 @@ static int get_desc(uint32_t wvalue, const uint8_t **d, uint16_t *l)
+@@ -477,10 +543,22 @@ static int get_desc(uint32_t wvalue, const uint8_t **d, uint16_t *l)
  {
      switch (wvalue >> 8) {
      case 1:
@@ -165,7 +163,7 @@ index bdf6769..e79cd1a 100644
          *d = USB_CDC_ON ? CFG_DESC : CFG_DESC_PLAIN;
          *l = (uint16_t)(USB_CDC_ON ? sizeof CFG_DESC : sizeof CFG_DESC_PLAIN);
          return 1;
-@@ -781,14 +859,14 @@ static void ep0_service(void)
+@@ -797,14 +875,14 @@ static void ep0_service(void)
          return;
      case 0x010B:                                        /* SET_INTERFACE: alt 0 (alt 1 for the audio stream) */
  #if FELUCCA_UAC
@@ -182,7 +180,7 @@ index bdf6769..e79cd1a 100644
              uo_ep4_reset();
              uo_stream(wvalue);
              goto ack;
-@@ -799,7 +877,7 @@ static void ep0_service(void)
+@@ -815,7 +893,7 @@ static void ep0_service(void)
          goto stall;
      case 0x810A:
  #if FELUCCA_UAC
@@ -191,7 +189,7 @@ index bdf6769..e79cd1a 100644
              static uint8_t alt;
              alt = uac.alt;
              e0_send(&alt, 1, wlength);
-@@ -807,7 +885,7 @@ static void ep0_service(void)
+@@ -823,7 +901,7 @@ static void ep0_service(void)
          }
  #endif
  #if FELUCCA_UAC_OUT
@@ -200,7 +198,7 @@ index bdf6769..e79cd1a 100644
              static uint8_t alt_o;
              alt_o = uo.alt;
              e0_send(&alt_o, 1, wlength);
-@@ -861,7 +939,7 @@ static void ep0_service(void)
+@@ -877,7 +955,7 @@ static void ep0_service(void)
  #endif
  #if FELUCCA_UAC
      case 0x2201:                                        /* SET_CUR, endpoint: sampling frequency */
@@ -209,7 +207,7 @@ index bdf6769..e79cd1a 100644
              goto stall;
          if (wlength) {
              uac.e0_rx = 1;
-@@ -1649,3 +1727,27 @@ static __attribute__((unused)) void usb_cdc_switch(uint32_t on)
+@@ -1690,3 +1768,27 @@ static __attribute__((unused)) void usb_cdc_switch(uint32_t on)
      usb_cdc_on = (uint8_t)on;
  }
  #endif
