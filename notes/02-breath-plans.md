@@ -70,3 +70,14 @@ and layer 3 at 105-127.
 four knobs then take SPLIT, A, B, C, with WIDTH on a "+" page. A bonus comes with it: under a split, a layer at 0 %
 share needs no rendering, only its envelope and state kept. At most two layers render at once, which makes a fourth
 layer cheap. That is worth measuring alongside the second core.
+
+## 6. Web editor: a layer clipboard (backlog, 2026-10-27)
+
+Copy a layer to a clipboard and paste it into any layer of any preset, so a good puff or a base synth setting can
+be reused. The editor already copies a layer into another one of the same preset (core.mjs); this keeps copies across
+presets and sessions:
+- **Kept:** in the browser (localStorage), as a small named list ("PINK PUFF", "EVA BRASS BASE"); a copy is the
+  layer's engine and every P_* value.
+- **Paste:** into the layer chosen, writing its values through SET, as a knob would, so the device's edit buffer
+  takes it and SAVE keeps it.
+- **Export / import** of the list as a JSON file, beside BACKUP / RESTORE, so it can move to another computer.

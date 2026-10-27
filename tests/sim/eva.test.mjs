@@ -27,7 +27,7 @@ export default function (t) {
     t.off(69, 1500);
     check(none < 1e-4 && pk > 0.05 && pk < 1 && run(200) < 1e-4, `EVA preset ${k}: silent without breath (${none.toExponential(1)}), speaks (${pk.toFixed(3)}), silent after`);
   }
-  check(k === 18, `EVA: ${k} presets`);
+  check(k === 22, `EVA: ${k} presets`);
   // breath is the envelope: a ramp 0 -> 127 in 8 steps, louder and brighter each step
   fresh(0);
   ex.sim_midi(0x90, 57, 80);
@@ -139,9 +139,11 @@ export default function (t) {
     for (const v of x) { const s0 = v + c * s1 - s2; s2 = s1; s1 = s0; }
     return Math.sqrt(s1 * s1 + s2 * s2 - c * s1 * s2) / (rms(x) * x.length);
   };
-  const ft = zc(hard) / 2 / 0.3, dt = 20 * Math.log10(rms(hard) / saw), th = on220(hard), ts = on220(soft);
-  check(Math.abs(1200 * Math.log2(ft / 220)) < 120 && th > 1.5 * ts && Math.abs(dt) < 4.5,
-    `EVA TUNED: on A3 blown hard (${ft.toFixed(0)} Hz by its crossings, ${dt.toFixed(1)} dB of SAW), more of it on the note than blown softly (${th.toFixed(3)} vs ${ts.toFixed(3)})`);
+  // (on the note: A3's bin over the whole, 0.707 for a sine, ~0.02 for white noise; crossings are no measure of
+  // a noise this narrow, they wander with the noise)
+  const dt = 20 * Math.log10(rms(hard) / saw), th = on220(hard), ts = on220(soft);
+  check(th > 0.25 && th > 1.5 * ts && Math.abs(dt) < 4.5,
+    `EVA TUNED: on A3 blown hard (${th.toFixed(3)} of it on the note, ${dt.toFixed(1)} dB of SAW), wider blown softly (${ts.toFixed(3)})`);
   // a puff: PINK with the layer's ENVELOPE (ATTACK 0, a short DECAY, SUSTAIN 0): there on a tongued note, gone while
   // the breath holds, not again on a slur, again on the next tongued note
   fresh(0); ex.sim_par_set(E(1), W_PINK); ex.sim_par_set(L1(C.P_ATK), 0); ex.sim_par_set(L1(C.P_DEC), 30); ex.sim_par_set(L1(C.P_SUS), 0);

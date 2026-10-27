@@ -234,6 +234,21 @@ static const factory_t FACTORY[] = {
     {"EVA TRANCE", {ENG(0, ENG_ID_EVA, 17), SND(S_VOLUME, 88), SND(S_REV_TYPE, 1), SND(S_REV_MIX, 30), SND(S_DLY_MIX, 22)}},
     {"EVA SUPER STACK", {ENG(0, ENG_ID_EVA, 16), ENG(1, ENG_ID_EVA, 15), PAR(1, P_LEVEL, 60), PAR(1, P_TRANS, -12),
                          SND(S_VOLUME, 74), SND(S_REV_TYPE, 1), SND(S_REV_MIX, 30), SND(S_DLY_MIX, 15)}},
+    /* 88 .. 92 (2026-10-27): ALTO FLUTE with a layer of EVA's noise (its engine presets 18 .. 21: PUFF, CHIFF, HUFF,
+     * AIR), a puff on each tongued note (the layer's ENVELOPE: ATTACK 0, a short DECAY, SUSTAIN 0; a slur has none),
+     * or air under the tone. DECAY 40 ~ 27 ms, 48 ~ 40 ms, 56 ~ 70 ms. The levels: a puff's peak ~4 dB under the
+     * tone held, the chiff's ~6, the air ~14 held (each layer alone in the sim, 2026-10-27) */
+#define ALTO SND(S_VOLUME, 64), PAR(0, P_TRANS, -12), SND(S_REV_TYPE, 1), SND(S_REV_MIX, 36), SND(S_REV_PRE, 30)
+#define PUFF(l, dec) PAR(l, P_ATK, 0), PAR(l, P_DEC, dec), PAR(l, P_SUS, 0)
+    {"ALTO PUFF", {ENG(0, ENG_ID_ERS, 31), ALTO, ENG(1, ENG_ID_EVA, 18), PAR(1, P_TRANS, -12), PUFF(1, 40), PAR(1, P_LEVEL, 120)}},
+    /* (the chiff rings on the 2nd harmonic: TRANS 0 over the tone's -12) */
+    {"ALTO CHIFF", {ENG(0, ENG_ID_ERS, 31), ALTO, ENG(1, ENG_ID_EVA, 19), PUFF(1, 56), PAR(1, P_LEVEL, 80)}},
+    {"ALTO HUFF", {ENG(0, ENG_ID_ERS, 31), ALTO, ENG(1, ENG_ID_EVA, 20), PAR(1, P_TRANS, -12), PUFF(1, 48), PAR(1, P_LEVEL, 80)}},
+    {"ALTO AIR", {ENG(0, ENG_ID_ERS, 31), ALTO, ENG(1, ENG_ID_EVA, 21), PAR(1, P_TRANS, -12), PAR(1, P_LEVEL, 45)}},
+    {"ALTO BREATHY", {ENG(0, ENG_ID_ERS, 31), ALTO, ENG(1, ENG_ID_EVA, 19), PUFF(1, 56), PAR(1, P_LEVEL, 80),
+                      ENG(2, ENG_ID_EVA, 21), PAR(2, P_TRANS, -12), PAR(2, P_LEVEL, 38)}},
+#undef PUFF
+#undef ALTO
 };
 #undef ENG
 #undef PAR

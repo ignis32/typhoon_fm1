@@ -434,6 +434,12 @@ static const preset_t EVA_PRESETS[] = {
     EAP("EVA SUB BASS",90, EW_SUB,    85,    50, 35, 80,  0, 20, EF_LP4,  0,  0,  0, 64,  0, 10, 96),
     EAP("EVA SUPERSAW",80, EW_SUPER,  70,    66, 15, 70, 30,  0, EF_LP2,  0,  0,  0, 64, 38,  0, 64),
     EAP("EVA TRANCE",  85, EW_SUPER,  85,    58, 40, 84,  0, 10, EF_LP4,  0,  0,  0, 64, 38,  0, 80),
+    /* the noises (18 ..): for a layer of its own beside a tone, quick to follow the breath, no vibrato. A puff wants
+     * the layer's ENVELOPE short (ATTACK 0, DECAY ~30 .. 70 ms, SUSTAIN 0): on each tongued note, not on a slur */
+    EAP("EVA PUFF",   127, EW_PINK,   30,    80, 25, 104, 0,  0, EF_LP2,  0,  0,  0, 64, 38,  0, 96),   /* "puh" */
+    EAP("EVA CHIFF",  127, EW_TUNED,  30,   100,  0, 64,  0,  0, EF_LP2,  0,  0,  0, 64, 38,  0, 96),   /* (TRANS +12) */
+    EAP("EVA HUFF",   127, EW_BROWN,  30,    90,  0, 80,  0,  0, EF_LP2,  0,  0,  0, 64, 38,  0, 96),   /* "huh" */
+    EAP("EVA AIR",    127, EW_PINK,   30,   104, 20, 64,  0,  0, EF_BP,   0,  0,  0, 64, 64,  0, 96),   /* (held) */
 };
 #undef EAP
 
