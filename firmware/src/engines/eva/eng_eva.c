@@ -1,8 +1,9 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 /* Copyright (C) 2026 ignis32 */
 /* EVA: a breath synth in the line of the Steiner / Crumar EVI's brass synths. One breath, shaped separately for each
- * destination: the loudness, the cutoff and the vibrato each have their own threshold, curve and attack / release,
- * so blowing harder is louder, brighter and livelier at different rates. No ADSR: breath is the envelope.
+ * destination: the loudness, the cutoff and the vibrato each have their own threshold and curve, so blowing harder
+ * is louder, brighter and livelier in different measure. Each follows the breath at once (2026-10-27: no attack /
+ * release of their own; the breath's only smoothing is global, G_BSMOOTH). No ADSR: breath is the envelope.
  * typhoon's layer does the rest as for every engine: notes and legato (note_on only for an articulated note), bend and
  * tilt, the breath curve, effects.
  *
@@ -26,7 +27,7 @@
  *          CUTOFF  the filter's floor, -3 .. +3 octaves (64: none)
  * Page 2:  RES     resonance
  *          SWEEP   a kick of the cutoff on each articulated note, decaying in 80 ms: -4 .. +4 octaves (64: none)
- *          VIB     vibrato depth (0 .. 60 cents): it comes in only above 55 % breath, over 400 ms, faster blown harder
+ *          VIB     vibrato depth (0 .. 60 cents): only above 55 % breath, deeper and faster blown harder
  *          SHAPE   the waveshaper's drive, more of it with breath (0: off)
  * Page 3:  FILTER  LP2, LP4, BP, HP
  *          VOWEL   the formant's vowel, A E I O U (in between: between them)
@@ -35,15 +36,14 @@
  * Page 4:  RATE    the vibrato / tremolo LFO, 3 .. 8 Hz (64: 5.5)
  *          KEYTRK  the cutoff's key tracking, 0 .. 1 octave an octave from C4 (38: 0.3)
  *          CHIFF   a burst of bright noise on each articulated note, 30 ms, as loud as the breath at once (0: none)
- *          RESPONSE how fast the level and the filter follow the breath: x 1/4 .. x 4 (64: attack 8 / release 25 ms,
- *                  the filter 12 / 40 ms)
- * Fixed: AMP slot threshold 4 % (no smoothing of its own: the breath's is global, G_BSMOOTH); FILTER slot curve +0.3 (y^0.66), range 7 octaves; humanise 0.15.
+ *          (empty: RESPONSE until 2026-10-27, how fast the level and the filter followed the breath)
+ * Fixed: AMP slot threshold 4 %; FILTER slot curve +0.3 (y^0.66), range 7 octaves; humanise 0.15.
  * Float (the AC79's single-precision FPU; no double, no libm: exp2 / log2 / tan / sin by polynomials, per block). */
 
 typedef struct {
     float ph, ph2, pwm, vib;                       /* oscillator phases, the DBL PWM LFO, the vibrato LFO (cycles) */
     float ic1, ic2;                                /* the SVF */
-    float y, za, zf, zv;                           /* the slots: the breath in, AMP, FILTER, VIB attack / release */
+    float y, za, zf, zv;                           /* the slots: the breath in, AMP, FILTER, VIB (each at once) */
     float sweep, gain, a1, a2, a3;                 /* the sweep envelope; the last block's gain and SVF coefficients */
     float hp, hf, hg;                              /* per-note humanise: cents, octaves, gain */
     float ic3, ic4, fm[5];                         /* LP4's second stage; the formant's two band-passes; the chiff's
@@ -191,13 +191,6 @@ static float eva_harm(float ph, float dt, float n)
     return 0.6f * y;
 }
 
-/* the slots' attack / release coefficients at the control rate (44100 / 32 = 1378 Hz: 1 - e^(-1000 / (t f))) */
-#define EVA_A_ATK 0.0867f                          /* AMP 8 ms */
-#define EVA_A_REL 0.0286f                          /* AMP 25 ms */
-#define EVA_F_ATK 0.0587f                          /* FILTER 12 ms */
-#define EVA_F_REL 0.0180f                          /* FILTER 40 ms */
-#define EVA_V_ATK 0.00181f                         /* VIB 400 ms */
-#define EVA_V_REL 0.00483f                         /* VIB 150 ms */
 #define EVA_SWEEP 0.99098f                         /* the sweep's decay a block, 80 ms */
 #define EVA_CHIFF 0.9761f                          /* the chiff's, 30 ms */
 /* the formants (Hz) of A E I O U (a man's voice) */
@@ -238,19 +231,19 @@ static void eva_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const v
     float sed = (float)p[P_E2] / 127.f, res = (float)p[P_E4] / 127.f, x, af, amp, oct, fc, g0, g1, b1, b2, b3;
     float dt, vibc, w = 0.35f, shp = (float)p[P_E7] / 127.f, wsd, note = (float)m->pitch16 / 16.f;
     int32_t filt = clamp(p[P_E8], 0, EVA_NFILT - 1);
-    float rsp = eva_exp2(((float)p[P_E15] - 64.f) / 32.f), fmt = (float)p[P_E10] / 127.f, vw, tr, tr0, tr1;
+    float fmt = (float)p[P_E10] / 127.f, vw, tr, tr0, tr1;
     float ch0, ch1, ck = (float)p[P_E14] * (0.35f / 127.f) * eva_sqrt(br), c1, c2, c3, d1, d2, d3, fk = 0.12f;
     float t1 = 0.f, t2 = 0.f, t3 = 0.f, tk = 0.f, tg = 0.f;   /* TUNED's resonator */
     uint32_t i, j;
     (void)v;
     br = eva_clamp(br, 0.f, 1.f);
-    /* the slots: BR_LVL, AMP's threshold; then AMP and FILTER each their curve and attack / release */
+    /* the slots: BR_LVL, AMP's threshold; then AMP and FILTER each their curve, at once */
     x = eva_clamp(br * (float)p[P_E0] / 100.f, 0.f, 1.f);
     x = eva_clamp((x - 0.04f) / 0.96f, 0.f, 1.f);
     s->y = x;
-    s->za += eva_clamp((s->y > s->za ? EVA_A_ATK : EVA_A_REL) * rsp, 0.f, 1.f) * (s->y - s->za);
+    s->za = s->y;
     af = eva_pow(s->y, 0.66f);                     /* (CURV +0.3: 4^-0.3) */
-    s->zf += eva_clamp((af > s->zf ? EVA_F_ATK : EVA_F_REL) * rsp, 0.f, 1.f) * (af - s->zf);
+    s->zf = af;
     /* S.E.D.: the gain's law, the filter's depth and floor */
     amp = eva_pow(s->za, 1.f - 0.75f * sed) * s->hg;
     oct = 2.3f + 3.f * (1.f - sed) + ((float)p[P_E3] - 64.f) * (3.f / 64.f)
@@ -267,9 +260,8 @@ static void eva_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const v
     vw -= (float)j;
     eva_svf(EVA_F1[j] + (EVA_F1[j + 1u] - EVA_F1[j]) * vw, fk, &c1, &c2, &c3);
     eva_svf(EVA_F2[j] + (EVA_F2[j + 1u] - EVA_F2[j]) * vw, fk, &d1, &d2, &d3);
-    /* vibrato: above 55 % breath, in over 400 ms, faster blown harder */
-    x = eva_clamp((br - 0.55f) / 0.45f, 0.f, 1.f);
-    s->zv += (x > s->zv ? EVA_V_ATK : EVA_V_REL) * (x - s->zv);
+    /* vibrato: above 55 % breath, deeper and faster blown harder */
+    s->zv = eva_clamp((br - 0.55f) / 0.45f, 0.f, 1.f);
     s->vib += (3.f + 5.f * (float)p[P_E12] / 127.f + 1.6f * s->zv) * (float)CTL / (float)FS;
     if (s->vib >= 1.f) s->vib -= 1.f;
     tr = s->vib + 0.25f;                           /* the tremolo: a quarter cycle on (louder as the pitch rises) */
@@ -284,7 +276,7 @@ static void eva_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const v
         w = 0.5f + 0.3f * eva_sin(s->pwm);
     }
     wsd = shp * (0.5f + 0.5f * s->za) * 4.f;       /* the drive, more with breath */
-    s->zw += (br > s->zw ? EVA_F_ATK : EVA_F_REL) * (br - s->zw);   /* the waves' breath: all of it, BREATH aside */
+    s->zw = br;                                    /* the waves' breath: all of it, BREATH aside */
     if (wave == EW_BPWM)
         w = 0.08f + 0.42f * s->zw;
     if (wave == EW_HARM) {                         /* the harmonics with the breath, glided (no steps) */
@@ -410,6 +402,7 @@ static void eva_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const v
     s->a3 = b3;
 }
 
+/* (rsp: RESPONSE's old value, kept in the table, read by nothing since 2026-10-27) */
 #define EAP(n, b, w, sed, cut, res, swp, vib, shp, flt, vow, fmt, trm, rate, kt, chf, rsp) \
     {n, {b, w, sed, cut, res, swp, vib, shp, flt, vow, fmt, trm, rate, kt, chf, rsp}, {0, 0, 127, 25}, 0, 1, {0}, 0}
 static const preset_t EVA_PRESETS[] = {
@@ -462,7 +455,7 @@ static const engine_t ENG_EVA = {
         {"RATE", F_PCT, 0, 127, 64, 0, 0},
         {"KEYTRK", F_PCT, 0, 127, 38, 0, 0},
         {"CHIFF", F_PCT, 0, 127, 0, 0, 0},
-        {"RESPONSE", F_PCT, 0, 127, 64, 0, 0},
+        {0},                                   /* (RESPONSE until 2026-10-27: breath smoothing is global only) */
     },
     .presets = EVA_PRESETS,
     .npresets = NELEM(EVA_PRESETS),

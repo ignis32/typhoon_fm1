@@ -93,8 +93,18 @@ export default function (t) {
   check(tm > 1.4 && t0 < 1.1, `EVA TREM: the level moves (x${tm.toFixed(2)}, without x${t0.toFixed(2)})`);
   const c1 = hf2(take(() => ex.sim_par_set(E(14), 127), 20, 5)), c0 = hf2(take(() => {}, 20, 5));
   check(c1 > c0 * 1.3, `EVA CHIFF: noise at the start (${c1.toFixed(3)} vs ${c0.toFixed(3)})`);
-  const r0 = rms(take(() => ex.sim_par_set(E(15), 0), 30, 15)), r1 = rms(take(() => ex.sim_par_set(E(15), 127), 30, 15));
-  check(r1 > r0 * 1.5, `EVA RESPONSE: fast comes up sooner (${r1.toFixed(3)} vs ${r0.toFixed(3)} after 15 ms)`);
+  // no lag of its own: a breath step is there in the next few milliseconds (SMOOTH 0), loudness and brightness alike
+  // (until 2026-10-27 the level took ~8 ms to come up, the cutoff ~12, more with RESPONSE low)
+  const step = () => {
+    fresh(0); ex.sim_par_set(E(6), 0); ex.sim_par_set(E(5), 64);
+    ex.sim_midi(0xB0, 2, 40); ex.sim_midi(0x90, 57, 80); run(300);
+    ex.sim_midi(0xB0, 2, 120);
+    const x = grab(40); t.off(57, 800);
+    const a = x.slice(441, 882), b = x.slice(1323, 1764);   // 10 .. 20 ms, 30 .. 40 ms after the step
+    return { lv: rms(a) / rms(b), br: hf(a) / hf(b) };
+  };
+  const st = step();
+  check(st.lv > 0.95 && st.br > 0.95, `EVA: no lag of its own, at the new level and brightness 10 ms after a breath step (x${st.lv.toFixed(3)}, x${st.br.toFixed(3)} of 30 ms after)`);
   // the waves breath plays: SYNC, BR PWM, HARMONIC brighter blown harder (more than SAW gets from the filter alone,
   // the filter held open); SUB an octave down; SUPERSAW in tune
   const harm = (w, b) => {                        // the harmonics 1 .. 8 of A3 (Goertzel), the filter open far above
