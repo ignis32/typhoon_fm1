@@ -8,8 +8,8 @@
  * tilt, the breath curve, effects.
  *
  *   oscillator (SAW, PULSE, SQUARE, TRI band-limited; MULTI saw + pulse spread; DBL saw + pulse, its width swept
- *   faster up the keyboard; and the ones breath plays: SYNC, BR PWM, HARMONIC; SUB, SUPERSAW; the noises WHITE, PINK,
- *   BROWN, TUNED) + chiff -> filter (LP2, LP4, BP, HP: TPT SVF) -> waveshaper -> formant -> gain, tremolo
+ *   faster up the keyboard; and the ones breath plays: SYNC, BR PWM, HARMONIC; SUB, SUPERSAW; the noises NS_WHITE,
+ *   NS_PINK, NS_BROWN, NS_TUNED) + chiff -> filter (LP2, LP4, BP, HP: TPT SVF) -> waveshaper -> formant -> gain, tremolo
  *
  * Page 1:  BREATH  how much of the breath reaches the slots (BR_LVL: 80 = 0.8; what breath moves, + vmod.shape)
  *          WAVE    SAW, PULSE, SQUARE, TRI, MULTI, DBL;
@@ -18,9 +18,10 @@
  *                  HARMONIC additive: the harmonics come in one by one with the breath, 1 (a sine) .. 16 (a saw's)
  *                  SUB      a saw and a square an octave below
  *                  SUPERSAW seven saws spread +-20 cents, wider blown harder
- *                  WHITE, PINK (-3 dB/oct), BROWN (-6 dB/oct)  noise, each as loud as a saw: a layer of breath noise, or
- *                           with the layer's ENVELOPE (ATTACK 0, DECAY short, SUSTAIN 0) a puff on each tongued note
- *                  TUNED    noise through a resonator on the note: wide blown softly (a breath), narrow blown hard
+ *                  NS_WHITE, NS_PINK (-3 dB/oct), NS_BROWN (-6 dB/oct)  noise, each as loud as a saw: a layer of breath
+ *                           noise, or with the layer's ENVELOPE (ATTACK 0, DECAY short, SUSTAIN 0) a puff on each tongued
+ *                           note (NS_: the noises, waves and presets, told apart at a glance and listed together)
+ *                  NS_TUNED noise through a resonator on the note: wide blown softly (a breath), narrow blown hard
  *                           (almost a tone); the layer's TRANS +12 / +19 rings it on a harmonic (a flute's chiff)
  *          S.E.D.  loudness against brightness: high, the level comes up fast and the filter does the dynamics (a
  *                  low-pass gate); low, a plain VCA and a more open tone
@@ -136,7 +137,8 @@ static void eva_svf(float fc, float k, float *a1, float *a2, float *a3)
 enum { EW_SAW, EW_PULSE, EW_SQUARE, EW_TRI, EW_MULTI, EW_DBL, EW_SYNC, EW_BPWM, EW_HARM, EW_SUB, EW_SUPER,
        EW_WHITE, EW_PINK, EW_BROWN, EW_TUNED, EVA_NWAVE };
 static const char *const EVA_N_WAVE[EVA_NWAVE] = {"SAW", "PULSE", "SQUARE", "TRI", "MULTI", "DBL", "SYNC", "BR PWM",
-                                                  "HARMONIC", "SUB", "SUPERSAW", "WHITE", "PINK", "BROWN", "TUNED"};
+                                                  "HARMONIC", "SUB", "SUPERSAW", "NS_WHITE", "NS_PINK", "NS_BROWN",
+                                                  "NS_TUNED"};   /* (NS_: the noises, told apart and together) */
 static const float EVA_SPREAD[6] = {-1.f, -0.62f, -0.3f, 0.29f, 0.6f, 0.98f};   /* SUPERSAW's six, x the spread */
 
 /* SYNC: a saw at r x the note, restarted at each of the note's cycles. polyBLEP on both steps (its own wrap, the
@@ -429,10 +431,10 @@ static const preset_t EVA_PRESETS[] = {
     EAP("EVA TRANCE",  85, EW_SUPER,  85,    58, 40, 84,  0, 10, EF_LP4,  0,  0,  0, 64, 38,  0, 80),
     /* the noises (18 ..): for a layer of its own beside a tone, quick to follow the breath, no vibrato. A puff wants
      * the layer's ENVELOPE short (ATTACK 0, DECAY ~30 .. 70 ms, SUSTAIN 0): on each tongued note, not on a slur */
-    EAP("EVA PUFF",   127, EW_PINK,   30,    80, 25, 104, 0,  0, EF_LP2,  0,  0,  0, 64, 38,  0, 96),   /* "puh" */
-    EAP("EVA CHIFF",  127, EW_TUNED,  30,   100,  0, 64,  0,  0, EF_LP2,  0,  0,  0, 64, 38,  0, 96),   /* (TRANS +12) */
-    EAP("EVA HUFF",   127, EW_BROWN,  30,    90,  0, 80,  0,  0, EF_LP2,  0,  0,  0, 64, 38,  0, 96),   /* "huh" */
-    EAP("EVA AIR",    127, EW_PINK,   30,   104, 20, 64,  0,  0, EF_BP,   0,  0,  0, 64, 64,  0, 96),   /* (held) */
+    EAP("EVA NS_PUFF", 127, EW_PINK,  30,    80, 25, 104, 0,  0, EF_LP2,  0,  0,  0, 64, 38,  0, 96),   /* "puh" */
+    EAP("EVA NS_CHIFF",127, EW_TUNED, 30,   100,  0, 64,  0,  0, EF_LP2,  0,  0,  0, 64, 38,  0, 96),   /* (TRANS +12) */
+    EAP("EVA NS_HUFF", 127, EW_BROWN, 30,    90,  0, 80,  0,  0, EF_LP2,  0,  0,  0, 64, 38,  0, 96),   /* "huh" */
+    EAP("EVA NS_AIR",  127, EW_PINK,  30,   104, 20, 64,  0,  0, EF_BP,   0,  0,  0, 64, 64,  0, 96),   /* (held) */
 };
 #undef EAP
 
