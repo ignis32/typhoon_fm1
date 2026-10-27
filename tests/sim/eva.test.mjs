@@ -119,4 +119,37 @@ export default function (t) {
   const pf = (w) => { fresh(0); ex.sim_par_set(E(6), 0); ex.sim_par_set(E(1), w); ex.sim_midi(0xB0, 2, 100); ex.sim_midi(0x90, 69, 80); run(500); const f = t.pitch(300, 150, 600); t.off(69, 800); return f; };
   const fsub = pf(9), fsup = pf(10);
   check(Math.abs(1200 * Math.log2(fsub / 220)) < 15 && Math.abs(1200 * Math.log2(fsup / 440)) < 15, `EVA SUB at A3 (${fsub.toFixed(1)} Hz), SUPERSAW at A4 (${fsup.toFixed(1)} Hz)`);
+
+  // the noises: WHITE, PINK, BROWN each about as loud as SAW (the filter open far above), darker in that order;
+  // TUNED rings on the note blown hard, wider (brighter) blown softly
+  const W_WHITE = 11, W_PINK = 12, W_BROWN = 13, W_TUNED = 14;
+  const play = (w, b, note = 57) => {
+    fresh(0); ex.sim_par_set(E(6), 0); ex.sim_par_set(E(1), w); ex.sim_par_set(E(3), 127); ex.sim_par_set(E(5), 64);
+    ex.sim_midi(0xB0, 2, b); ex.sim_midi(0x90, note, 80); run(500);
+    const x = grab(300); t.off(note, 1200);
+    return x;
+  };
+  const saw = rms(play(0, 110)), nz = [W_WHITE, W_PINK, W_BROWN].map((w) => play(w, 110));
+  const db = nz.map((x) => 20 * Math.log10(rms(x) / saw)), tops = nz.map(hf);
+  check(db.every((d) => Math.abs(d) < 4.5) && tops[0] > tops[1] && tops[1] > tops[2],
+    `EVA WHITE, PINK, BROWN: as loud as SAW (${db.map((d) => d.toFixed(1)).join(' ')} dB), darker in turn (${tops.map((v) => v.toFixed(2)).join(' ')})`);
+  const hard = play(W_TUNED, 127), soft = play(W_TUNED, 35);
+  const on220 = (x) => {                         // how much of it is on the note: A3's Goertzel bin against the whole
+    const c = 2 * Math.cos(2 * Math.PI * 220 / 44100); let s1 = 0, s2 = 0;
+    for (const v of x) { const s0 = v + c * s1 - s2; s2 = s1; s1 = s0; }
+    return Math.sqrt(s1 * s1 + s2 * s2 - c * s1 * s2) / (rms(x) * x.length);
+  };
+  const ft = zc(hard) / 2 / 0.3, dt = 20 * Math.log10(rms(hard) / saw), th = on220(hard), ts = on220(soft);
+  check(Math.abs(1200 * Math.log2(ft / 220)) < 120 && th > 1.5 * ts && Math.abs(dt) < 4.5,
+    `EVA TUNED: on A3 blown hard (${ft.toFixed(0)} Hz by its crossings, ${dt.toFixed(1)} dB of SAW), more of it on the note than blown softly (${th.toFixed(3)} vs ${ts.toFixed(3)})`);
+  // a puff: PINK with the layer's ENVELOPE (ATTACK 0, a short DECAY, SUSTAIN 0): there on a tongued note, gone while
+  // the breath holds, not again on a slur, again on the next tongued note
+  fresh(0); ex.sim_par_set(E(1), W_PINK); ex.sim_par_set(L1(C.P_ATK), 0); ex.sim_par_set(L1(C.P_DEC), 30); ex.sim_par_set(L1(C.P_SUS), 0);
+  ex.sim_midi(0xB0, 2, 100); ex.sim_midi(0x90, 60, 80);
+  const p0 = run(20); run(400); const p1 = run(100);
+  ex.sim_midi(0x90, 62, 80); ex.sim_midi(0x80, 60, 64); const p2 = run(20); run(300);
+  t.off(62, 800);
+  ex.sim_midi(0xB0, 2, 100); ex.sim_midi(0x90, 64, 80); const p3 = run(20); t.off(64, 800);
+  check(p0 > 0.03 && p1 < p0 / 30 && p2 < p0 / 30 && p3 > 0.03,
+    `EVA PINK as a puff: on a tongued note (${p0.toFixed(3)}), gone while blown (${p1.toExponential(1)}), not on a slur (${p2.toExponential(1)}), again tongued (${p3.toFixed(3)})`);
 }

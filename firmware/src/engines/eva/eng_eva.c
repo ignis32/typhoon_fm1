@@ -7,7 +7,8 @@
  * tilt, the breath curve, effects.
  *
  *   oscillator (SAW, PULSE, SQUARE, TRI band-limited; MULTI saw + pulse spread; DBL saw + pulse, its width swept
- *   faster up the keyboard; and the ones breath plays: SYNC, BR PWM, HARMONIC; SUB, SUPERSAW) + chiff -> filter (LP2, LP4, BP, HP: TPT SVF) -> waveshaper -> formant -> gain, tremolo
+ *   faster up the keyboard; and the ones breath plays: SYNC, BR PWM, HARMONIC; SUB, SUPERSAW; the noises WHITE, PINK,
+ *   BROWN, TUNED) + chiff -> filter (LP2, LP4, BP, HP: TPT SVF) -> waveshaper -> formant -> gain, tremolo
  *
  * Page 1:  BREATH  how much of the breath reaches the slots (BR_LVL: 80 = 0.8; what breath moves, + vmod.shape)
  *          WAVE    SAW, PULSE, SQUARE, TRI, MULTI, DBL;
@@ -16,6 +17,10 @@
  *                  HARMONIC additive: the harmonics come in one by one with the breath, 1 (a sine) .. 16 (a saw's)
  *                  SUB      a saw and a square an octave below
  *                  SUPERSAW seven saws spread +-20 cents, wider blown harder
+ *                  WHITE, PINK (-3 dB/oct), BROWN (-6 dB/oct)  noise, each as loud as a saw: a layer of breath noise, or
+ *                           with the layer's ENVELOPE (ATTACK 0, DECAY short, SUSTAIN 0) a puff on each tongued note
+ *                  TUNED    noise through a resonator on the note: wide blown softly (a breath), narrow blown hard
+ *                           (almost a tone); the layer's TRANS +12 / +19 rings it on a harmonic (a flute's chiff)
  *          S.E.D.  loudness against brightness: high, the level comes up fast and the filter does the dynamics (a
  *                  low-pass gate); low, a plain VCA and a more open tone
  *          CUTOFF  the filter's floor, -3 .. +3 octaves (64: none)
@@ -46,6 +51,7 @@ typedef struct {
     float chiff, trem;                             /* the chiff's level (1 at an articulated note); the tremolo LFO */
     float ss[6], ph3, prev, nh, zw;                /* SUPERSAW's other six phases; SUB's; SYNC's sample held back; the
                                                     * harmonics HARMONIC plays (glided); the waves' breath (0 .. 1) */
+    float nz[4], tz[2];                            /* the noises: PINK's three poles, BROWN's one; TUNED's resonator */
     uint32_t seed, noise;
 } eva_t;
 static eva_t eva_st[NLAYER];
@@ -127,9 +133,10 @@ static void eva_svf(float fc, float k, float *a1, float *a2, float *a3)
     *a3 = g * *a2;
 }
 
-enum { EW_SAW, EW_PULSE, EW_SQUARE, EW_TRI, EW_MULTI, EW_DBL, EW_SYNC, EW_BPWM, EW_HARM, EW_SUB, EW_SUPER, EVA_NWAVE };
+enum { EW_SAW, EW_PULSE, EW_SQUARE, EW_TRI, EW_MULTI, EW_DBL, EW_SYNC, EW_BPWM, EW_HARM, EW_SUB, EW_SUPER,
+       EW_WHITE, EW_PINK, EW_BROWN, EW_TUNED, EVA_NWAVE };
 static const char *const EVA_N_WAVE[EVA_NWAVE] = {"SAW", "PULSE", "SQUARE", "TRI", "MULTI", "DBL", "SYNC", "BR PWM",
-                                                  "HARMONIC", "SUB", "SUPERSAW"};
+                                                  "HARMONIC", "SUB", "SUPERSAW", "WHITE", "PINK", "BROWN", "TUNED"};
 static const float EVA_SPREAD[6] = {-1.f, -0.62f, -0.3f, 0.29f, 0.6f, 0.98f};   /* SUPERSAW's six, x the spread */
 
 /* SYNC: a saw at r x the note, restarted at each of the note's cycles. polyBLEP on both steps (its own wrap, the
@@ -216,8 +223,10 @@ static void eva_note_on(track_t *t, voice_t *v)   /* an articulated note: the sw
 static void eva_block(track_t *t)
 {
     eva_t *s = &eva_st[(uint32_t)(t - trk) % NLAYER];
-    if (!t->v[0].active)
+    if (!t->v[0].active) {
         s->y = s->za = s->zf = s->zv = s->zw = s->gain = s->sweep = s->chiff = 0.f;
+        s->tz[0] = s->tz[1] = 0.f;                 /* (TUNED rings from silence on the next note's pitch) */
+    }
 }
 
 static void eva_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const vmod_t *m)
@@ -231,6 +240,7 @@ static void eva_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const v
     int32_t filt = clamp(p[P_E8], 0, EVA_NFILT - 1);
     float rsp = eva_exp2(((float)p[P_E15] - 64.f) / 32.f), fmt = (float)p[P_E10] / 127.f, vw, tr, tr0, tr1;
     float ch0, ch1, ck = (float)p[P_E14] * (0.35f / 127.f) * eva_sqrt(br), c1, c2, c3, d1, d2, d3, fk = 0.12f;
+    float t1 = 0.f, t2 = 0.f, t3 = 0.f, tk = 0.f, tg = 0.f;   /* TUNED's resonator */
     uint32_t i, j;
     (void)v;
     br = eva_clamp(br, 0.f, 1.f);
@@ -281,6 +291,14 @@ static void eva_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const v
         float nt = 1.f + 15.f * s->zw;
         s->nh += 0.2f * (nt - s->nh);
     }
+    if (wave == EW_TUNED) {                        /* TUNED: the resonator's damping, 0.5 blown softly .. 0.02 hard,
+                                                    * and the gain that keeps it as loud as a saw (its noise power
+                                                    * goes with its width: rms ~ sqrt(k fc / fs), measured) */
+        float tf = eva_clamp(dt * (float)FS, 20.f, 0.42f * (float)FS);
+        tk = 0.5f * eva_exp2(-4.644f * s->zw);
+        eva_svf(tf, tk, &t1, &t2, &t3);
+        tg = 0.577f / eva_sqrt(tk * tf / (float)FS);
+    }
     if (wave == EW_SUPER && s->ss[0] == 0.f)       /* (their phases spread from the start) */
         for (j = 0; j < 6u; j++) s->ss[j] = 0.13f + 0.141f * (float)j;
     g0 = s->gain;
@@ -316,6 +334,25 @@ static void eva_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const v
                 s->ss[j] += d3;
                 if (s->ss[j] >= 1.f) s->ss[j] -= 1.f;
             }
+            break;
+        }
+        case EW_WHITE: o = eva_urand(&s->noise); break;
+        case EW_PINK: {                            /* (P. Kellet's three-pole pink, rms 1.73: x 1/3) */
+            float w0 = eva_urand(&s->noise);
+            s->nz[0] = 0.99765f * s->nz[0] + 0.0990460f * w0;
+            s->nz[1] = 0.96300f * s->nz[1] + 0.2965164f * w0;
+            s->nz[2] = 0.57000f * s->nz[2] + 1.0526913f * w0;
+            o = 0.3333f * (s->nz[0] + s->nz[1] + s->nz[2] + 0.1848f * w0);
+            break;
+        }
+        case EW_BROWN:                             /* (leaky: -6 dB/oct above ~35 Hz, rms that of a saw) */
+            o = s->nz[3] = 0.995f * s->nz[3] + 0.1f * eva_urand(&s->noise);
+            break;
+        case EW_TUNED: {                           /* white noise, its band-pass at the note (k v1: 1 at the centre) */
+            float u = eva_urand(&s->noise) - s->tz[1], q1 = t1 * s->tz[0] + t2 * u, q2 = s->tz[1] + t2 * s->tz[0] + t3 * u;
+            s->tz[0] = 2.f * q1 - s->tz[0];
+            s->tz[1] = 2.f * q2 - s->tz[1];
+            o = tg * tk * q1;
             break;
         }
         default: o = eva_saw(s->ph, dt);
