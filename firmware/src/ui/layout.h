@@ -29,7 +29,7 @@ enum {
     PG_MIX,
     PG_GLOBAL, PG_BT, PG_TILT, PG_G_CURVE, PG_G_LP, PG_G_DRIVE, PG_G_DETUNE, PG_G_DELAY, PG_G_REVERB,
     PG_REVERB2, PG_G_REVERB2, PG_G_BREATH, PG_TONE, PG_ENG3, PG_ENG4, PG_LEAP,
-    PG_USB, PG_USBH,                              /* (new pages at the end: the others keep their numbers) */
+    PG_USB, PG_USBH, PG_ENG5,                     /* (new pages at the end: the others keep their numbers) */
     NPAGES
 };
 #define PG_STAY 0xFFu
@@ -39,7 +39,8 @@ static const ui_page_t PAGES[NPAGES] = {
     [PG_ENG1] = {0, UK_KNOBS, 1, PG_ENG2, {L(P_E0), L(P_E1), L(P_E2), L(P_E3)}},
     [PG_ENG2] = {0, UK_KNOBS, 2, PG_ENG3, {L(P_E4), L(P_E5), L(P_E6), L(P_E7)}},
     [PG_ENG3] = {0, UK_KNOBS, 3, PG_ENG4, {L(P_E8), L(P_E9), L(P_E10), L(P_E11)}},   /* (EDIT 3, 4: passed by when empty) */
-    [PG_ENG4] = {0, UK_KNOBS, 4, PG_TONE, {L(P_E12), L(P_E13), L(P_E14), L(P_E15)}},
+    [PG_ENG4] = {0, UK_KNOBS, 4, PG_ENG5, {L(P_E12), L(P_E13), L(P_E14), L(P_E15)}},
+    [PG_ENG5] = {0, UK_KNOBS, 5, PG_TONE, {L(P_E16), L(P_E17), L(P_E18), L(P_E19)}},   /* (2026-10-28) */
     [PG_TONE] = {"TONE", UK_KNOBS, 0, PG_ENG1, {L(P_TONE), L(P_TONE_A), L(P_TONE_B), L(P_TONE_C)}},   /* (after the engine: core/tone.c) */
     [PG_DRIVE] = {"DRIVE", UK_KNOBS, 0, PG_DETUNE, {SP(S_DRIVE), SP(S_DRV_AT), PR_NONE, PR_NONE}},
     [PG_DETUNE] = {"DETUNE", UK_KNOBS, 0, PG_DELAY, {SP(S_DT_CENTS), SP(S_DT_DELAY), SP(S_DT_WIDTH), SP(S_DT_MIX)}},

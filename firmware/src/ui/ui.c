@@ -171,7 +171,7 @@ static const char *page_title(const ui_page_t *pg)
         return "OFF";                              /* (an OFF layer's engine pages) */
     if (pg->title)
         return pg->title;
-    return e->page_title[(pg->eng_page - 1u) & 3u] ? e->page_title[(pg->eng_page - 1u) & 3u] : e->name;
+    return pg->eng_page - 1u < 5u && e->page_title[pg->eng_page - 1u] ? e->page_title[pg->eng_page - 1u] : e->name;
 }
 
 /* a knob's label: its descriptor's, "L2 LEVEL" when the handle names a fixed layer */
@@ -195,7 +195,7 @@ static int knob_live(pref_t r)                     /* has a range (engines mark 
     return d && d->max > d->min;
 }
 
-/* EDIT 3 / EDIT 4 of an engine with no knobs there: the EDIT button passes them by */
+/* EDIT 3 .. EDIT 5 of an engine with no knobs there: the EDIT button passes them by */
 static int page_empty(uint32_t pg)
 {
     uint32_t k;

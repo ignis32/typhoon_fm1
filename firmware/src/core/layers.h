@@ -35,10 +35,12 @@ enum {
                                       * whose meaning follows the type */
     P_E0, P_E1, P_E2, P_E3, P_E4, P_E5, P_E6, P_E7,
     P_E8, P_E9, P_E10, P_E11, P_E12, P_E13, P_E14, P_E15,
+    P_E16, P_E17, P_E18, P_E19,
     P_COUNT
 };
 #define NCOMMON P_E0
-#define NEPAR 16u                                  /* an engine's parameters (EDIT 1 .. 4); 8 until 2026-10-21 */
+#define NEPAR 20u                                  /* an engine's parameters (EDIT 1 .. 5); 16 until 2026-10-28, 8
+                                                    * until 2026-10-21 (presets.c reads older records by version) */
 
 typedef struct track {
     int16_t p[P_COUNT];

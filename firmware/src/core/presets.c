@@ -15,8 +15,9 @@
  * a read takes the main record, else the copy. (New sectors hold whatever was there: no good record, the slot
  * plays its factory preset until saved.)
  * A slot never saved plays a factory preset (FACTORY[k]) when there is one, else INIT (one sine).
- * A record keeps the counts it was written with (layers, P_COUNT, S_COUNT) and is read by them: its last NEPAR (16)
- * layer values are P_E0..P_E15, the ones before are the commons in order, S_* go by index. (Records from before
+ * A record keeps the counts it was written with (layers, P_COUNT, S_COUNT) and is read by them: its last engine values
+ * (ps_nepar: 16 in a version 1 record, until 2026-10-28; NEPAR, 20, from version 2) are P_E0.., the ones before are
+ * the commons in order, S_* go by index. (Records from before
  * 2026-10-21 held 8 engine values: not read right, there were none outside the factory.) New parameters therefore go
  * just before P_E0 (layers.h) or at the end of S_*, and take their defaults in older records; the record has room
  * for 4 layers of 40 and 48 S_*.
@@ -33,13 +34,14 @@
 #define PS_HI_AT (17u * 0x1000u)                   /* slots 65 .. 96: sectors 17 .. 20 (after the BT stack's 16) */
 #define PS_HI_COPY ((NPRESET - PS_LO) / PS_PER_SEC * 0x1000u)   /* their copy right after (sectors 21 .. 24) */
 #define PS_MAGIC 0x31505254u                       /* "TRP1" */
+#define PS_VER 2u                                  /* 2: NEPAR engine values (1: 16, until 2026-10-28) */
 #define PS_NL 4u
 #define PS_NP 40u
 #define PS_NS 48u
 #define PS_NAME 12u
 typedef struct {
     uint32_t magic, crc;                           /* crc: of every byte after it */
-    uint8_t ver, nl, np, ns;                       /* 1; NLAYER, P_COUNT, S_COUNT when written */
+    uint8_t ver, nl, np, ns;                       /* PS_VER (or 1); NLAYER, P_COUNT, S_COUNT when written */
     uint8_t own, spare[3];                         /* s_own */
     char name[PS_NAME];                            /* ASCII, 0-padded (no 0 when 12 long) */
     int16_t p[PS_NL][PS_NP];
@@ -277,8 +279,11 @@ static uint32_t ps_crc(const uint8_t *p, uint32_t n)
 }
 static int ps_ok(const ps_rec_t *r)
 {
-    return r->magic == PS_MAGIC && r->ver == 1u && r->crc == ps_crc((const uint8_t *)r + 8, PS_SLOT - 8u);
+    return r->magic == PS_MAGIC && (r->ver == 1u || r->ver == PS_VER) &&
+           r->crc == ps_crc((const uint8_t *)r + 8, PS_SLOT - 8u);
 }
+/* the engine values a record holds, its last ones: 16 in a version 1 record (until 2026-10-28), NEPAR from 2 */
+static uint32_t ps_nepar(const ps_rec_t *r) { return r->ver >= 2u ? NEPAR : 16u; }
 /* slot k's sector in the store (copy 0: the main one, 1: its copy) */
 static uint32_t ps_sec(uint32_t k, uint32_t copy)
 {
@@ -358,12 +363,12 @@ static void factory_apply(uint32_t k)
 
 static void ps_apply(const ps_rec_t *r)
 {
-    uint32_t l, i, nc = r->np > NEPAR ? r->np - NEPAR : 0;
+    uint32_t l, i, ne = ps_nepar(r), nc = r->np > ne ? r->np - ne : 0;
     layers_defaults();
     for (l = 0; l < NLAYER && l < r->nl && l < PS_NL; l++) {
         for (i = 0; i < NCOMMON && i < nc; i++)
             trk[l].p[i] = r->p[l][i];
-        for (i = 0; i < NEPAR && nc + i < r->np && nc + i < PS_NP; i++)
+        for (i = 0; i < ne && i < NEPAR && nc + i < r->np && nc + i < PS_NP; i++)
             trk[l].p[P_E0 + i] = r->p[l][nc + i];
     }
     for (i = 0; i < S_COUNT; i++)
@@ -440,7 +445,7 @@ static int ps_save(uint32_t k)
     k %= NPRESET;
     memset(&ps_new, 0, sizeof ps_new);
     ps_new.magic = PS_MAGIC;
-    ps_new.ver = 1;
+    ps_new.ver = PS_VER;
     ps_new.nl = NLAYER;
     ps_new.np = P_COUNT;
     ps_new.ns = S_COUNT;
@@ -466,7 +471,9 @@ static int ps_save(uint32_t k)
 /* ---- the state in the settings sector (<= 512 bytes). With room to grow: the counts it was saved with say what is
  * there, and are read by them as the presets are (layers: the commons, then the NEPAR engine values; S_* and G_* by
  * index): a new parameter (just before P_E0, or at the end of S_* / G_*) takes its default, nothing is lost */
-#define STATE_MAGIC 0x7A08u                        /* change it only when the layout below changes */
+#define STATE_MAGIC 0x7A09u                        /* change it only when the layout below changes (0x7A09: NEPAR engine
+                                                    * values; 0x7A08, until 2026-10-28, held 16: still read) */
+#define STATE_MAGIC_16 0x7A08u
 #define P_SAVED 40u
 #define S_SAVED 32u
 typedef struct {
@@ -484,11 +491,14 @@ _Static_assert(G_COUNT <= G_SAVED && S_COUNT <= S_SAVED && P_COUNT <= P_SAVED, "
 static void state_load(void)
 {
     static state_t s;
-    uint32_t i, n, nc;
+    uint32_t i, n, nc, ne;
     params_defaults();
     for (i = 0; i < NPRESET; i++)
         ps_index(i);
-    if (settings_load(&s, sizeof s) || s.magic != STATE_MAGIC || s.ng > G_SAVED || s.ns > S_SAVED || s.np < NEPAR ||
+    if (settings_load(&s, sizeof s))
+        s.magic = 0;
+    ne = s.magic == STATE_MAGIC_16 ? 16u : NEPAR;  /* the engine values it holds */
+    if ((s.magic != STATE_MAGIC && s.magic != STATE_MAGIC_16) || s.ng > G_SAVED || s.ns > S_SAVED || s.np < ne ||
         s.np > P_SAVED || s.nl != NLAYER) {
         ps_load(0);                                /* nothing saved, or a layout we do not know: the first preset */
         return;
@@ -499,11 +509,11 @@ static void state_load(void)
         sglob[i] = (int16_t)clamp(s.sg[i], SOUND[i].min, SOUND[i].max);
         sown[i] = (int16_t)clamp(s.so[i], SOUND[i].min, SOUND[i].max);
     }
-    nc = s.np - NEPAR;                             /* the commons saved; then the engine's NEPAR */
+    nc = s.np - ne;                                /* the commons saved; then the engine's ne */
     for (n = 0; n < NLAYER; n++) {
         for (i = 0; i < NCOMMON && i < nc; i++)
             trk[n].p[i] = s.p[n][i];               /* (an engine this build lacks: layers.c plays ENGINES[0]) */
-        for (i = 0; i < NEPAR; i++)
+        for (i = 0; i < ne; i++)
             trk[n].p[P_E0 + i] = s.p[n][nc + i];
     }
     s_own = (uint8_t)(s.own & ((1u << NGROUP) - 1u));
