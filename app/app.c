@@ -154,6 +154,7 @@ static void midi_send(uint32_t st, uint32_t d1, uint32_t d2)
 #include "core/layers.h"
 #define clamp tp_clamp                             /* (dsp.c's own, as plat.h's: the same; Felucca-Engines' file kept) */
 #include "dsp/dsp.c"
+#include "dsp/dspf.c"                              /* (its float twin: EVA's filter, oscillators, noises) */
 #include "engines/engines.h"
 #include "core/tone.c"
 #include "core/layers.c"

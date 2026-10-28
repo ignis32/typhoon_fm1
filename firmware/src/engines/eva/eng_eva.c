@@ -39,15 +39,15 @@
  *          CHIFF   a burst of bright noise on each articulated note, 30 ms, as loud as the breath at once (0: none)
  *          (empty: RESPONSE until 2026-10-27, how fast the level and the filter followed the breath)
  * Fixed: AMP slot threshold 4 %; FILTER slot curve +0.3 (y^0.66), range 7 octaves; humanise 0.15.
- * Float (the AC79's single-precision FPU; no double, no libm: exp2 / log2 / tan / sin by polynomials, per block). */
+ * Float (the AC79's single-precision FPU): its maths, oscillators, noises and filter are dsp/dspf.c's, shared. */
 
 typedef struct {
     float ph, ph2, pwm, vib;                       /* oscillator phases, the DBL PWM LFO, the vibrato LFO (cycles) */
-    float ic1, ic2;                                /* the SVF */
+    float flt[2];                                  /* the filter's state (dsp/dspf.c dspf_svf) */
     float y, za, zf, zv;                           /* the slots: the breath in, AMP, FILTER, VIB (each at once) */
     float sweep, gain, a1, a2, a3;                 /* the sweep envelope; the last block's gain and SVF coefficients */
     float hp, hf, hg;                              /* per-note humanise: cents, octaves, gain */
-    float ic3, ic4, fm[5];                         /* LP4's second stage; the formant's two band-passes; the chiff's
+    float lp4[2], fm1[2], fm2[2], chz;             /* LP4's second stage; the formant's two band-passes; the chiff's
                                                     * last noise */
     float chiff, trem;                             /* the chiff's level (1 at an articulated note); the tremolo LFO */
     float ss[6], ph3, prev, nh, zw;                /* SUPERSAW's other six phases; SUB's; SYNC's sample held back; the
@@ -57,82 +57,7 @@ typedef struct {
 } eva_t;
 static eva_t eva_st[NLAYER];
 
-/* ---- the small maths (no libm): exp2, log2 to ~1e-4, tan (Pade 3/2), the waveshaper's soft clip */
-typedef union { float f; uint32_t u; } eva_fu;
-static inline float eva_exp2(float x)
-{
-    eva_fu v;
-    float fl, f;
-    int32_t i;
-    if (x < -126.f) return 0.f;
-    if (x > 127.f) x = 127.f;
-    i = (int32_t)x;
-    if ((float)i > x) i--;
-    fl = (float)i;
-    f = x - fl;
-    v.u = (uint32_t)(i + 127) << 23;
-    return v.f * (1.f + f * (0.6957f + f * (0.2262f + f * 0.0782f)));
-}
-static inline float eva_log2(float x)              /* x > 0 */
-{
-    eva_fu v;
-    float m;
-    int32_t e;
-    v.f = x;
-    e = (int32_t)((v.u >> 23) & 255u) - 127;
-    v.u = (v.u & 0x007FFFFFu) | 0x3F800000u;
-    m = v.f;
-    return (float)e - 1.7417939f + (2.8212026f + (-1.4699568f + (0.44717955f - 0.056570851f * m) * m) * m) * m;
-}
-static inline float eva_pow(float y, float e) { return y <= 0.f ? 0.f : eva_exp2(e * eva_log2(y)); }
-static inline float eva_sqrt(float x)              /* (x <= 0: 0) one guess from the exponent, two Newton steps */
-{
-    eva_fu v;
-    float y;
-    if (x <= 0.f) return 0.f;
-    v.f = x;
-    v.u = (v.u >> 1) + 0x1FC00000u;
-    y = v.f;
-    y = 0.5f * (y + x / y);
-    return 0.5f * (y + x / y);
-}
-static inline float eva_clamp(float x, float lo, float hi) { return x < lo ? lo : x > hi ? hi : x; }
-static inline float eva_sat(float x)               /* tanh-like, x in -3 .. 3 */
-{
-    x = eva_clamp(x, -3.f, 3.f);
-    return x * (27.f + x * x) / (27.f + 9.f * x * x);
-}
-static inline float eva_sin(float p)               /* sin(2 pi p), p in 0 .. 1 (parabolic, then corrected) */
-{
-    float q = p < 0.5f ? 4.f * p - 1.f : 3.f - 4.f * p, y = 1.f - q * q;   /* (0 at p 0 / 0.5, peaks at 1/4, 3/4) */
-    y = p < 0.5f ? y : -y;
-    return y * (0.775f + 0.225f * (y < 0.f ? -y : y));
-}
-static inline float eva_blep(float t, float dt)    /* polyBLEP */
-{
-    if (t < dt) { t /= dt; return t + t - t * t - 1.f; }
-    if (t > 1.f - dt) { t = (t - 1.f) / dt; return t * t + t + t + 1.f; }
-    return 0.f;
-}
-static inline float eva_saw(float p, float dt) { return 2.f * p - 1.f - eva_blep(p, dt); }
-static inline float eva_pulse(float p, float dt, float w)
-{
-    float q = p + 1.f - w;
-    if (q >= 1.f) q -= 1.f;
-    return (p < w ? 1.f : -1.f) + eva_blep(p, dt) - eva_blep(q, dt);
-}
-
-static uint32_t eva_rand(uint32_t *s) { *s = *s * 1664525u + 1013904223u; return *s; }
-static float eva_urand(uint32_t *s) { return (float)(int32_t)eva_rand(s) * (1.f / 2147483648.f); }   /* -1 .. 1 */
-
-/* the SVF's coefficients for fc (Hz) and damping k */
-static void eva_svf(float fc, float k, float *a1, float *a2, float *a3)
-{
-    float x = 3.14159265f * fc / (float)FS, x2 = x * x, g = x * (15.f - x2) / (15.f - 6.f * x2);   /* tan(pi fc / fs) */
-    *a1 = 1.f / (1.f + g * (g + k));
-    *a2 = g * *a1;
-    *a3 = g * *a2;
-}
+/* (the maths, the oscillators, the noises and the filter: dsp/dspf.c, shared; EVA's own until 2026-10-28) */
 
 enum { EW_SAW, EW_PULSE, EW_SQUARE, EW_TRI, EW_MULTI, EW_DBL, EW_SYNC, EW_BPWM, EW_HARM, EW_SUB, EW_SUPER,
        EW_WHITE, EW_PINK, EW_BROWN, EW_TUNED, EVA_NWAVE };
@@ -178,7 +103,7 @@ static float eva_sync(eva_t *s, float dt, float r)
 /* HARMONIC: sin k x, k = 1 .. n (the last one faded in), 1 / k each, below 0.45 fs (Chebyshev: one sine a sample) */
 static float eva_harm(float ph, float dt, float n)
 {
-    float c = eva_sin(ph + 0.25f >= 1.f ? ph - 0.75f : ph + 0.25f), s1 = eva_sin(ph), s0 = 0.f, sk = s1, y = 0.f;
+    float c = dspf_sin(ph + 0.25f >= 1.f ? ph - 0.75f : ph + 0.25f), s1 = dspf_sin(ph), s0 = 0.f, sk = s1, y = 0.f;
     int32_t k, top = (int32_t)n + 1;
     if ((float)top * dt > 0.45f) top = (int32_t)(0.45f / dt);
     if (top > 16) top = 16;
@@ -212,9 +137,9 @@ static void eva_note_on(track_t *t, voice_t *v)   /* an articulated note: the sw
     }
     s->sweep = 1.f;
     s->chiff = 1.f;
-    s->hp = 3.f * EVA_HUMAN * eva_urand(&s->seed);          /* cents */
-    s->hf = 0.15f * EVA_HUMAN * eva_urand(&s->seed);        /* octaves */
-    s->hg = 1.f + 0.06f * EVA_HUMAN * eva_urand(&s->seed);  /* (+-0.5 dB x HUMAN) */
+    s->hp = 3.f * EVA_HUMAN * dspf_urand(&s->seed);          /* cents */
+    s->hf = 0.15f * EVA_HUMAN * dspf_urand(&s->seed);        /* octaves */
+    s->hg = 1.f + 0.06f * EVA_HUMAN * dspf_urand(&s->seed);  /* (+-0.5 dB x HUMAN) */
 }
 
 /* every block, sounding or not: a layer whose voice has faded out is at rest, all of it cleared (the followers, the
@@ -238,48 +163,52 @@ static void eva_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const v
     float dt, vibc, w = 0.35f, shp = (float)p[P_E7] / 127.f, wsd, note = (float)m->pitch16 / 16.f;
     int32_t filt = clamp(p[P_E8], 0, EVA_NFILT - 1);
     float fmt = (float)p[P_E10] / 127.f, vw, tr, tr0, tr1;
-    float ch0, ch1, ck = (float)p[P_E14] * (0.35f / 127.f) * eva_sqrt(br), c1, c2, c3, d1, d2, d3, fk = 0.12f;
-    float t1 = 0.f, t2 = 0.f, t3 = 0.f, tk = 0.f, tg = 0.f;   /* TUNED's resonator */
+    float ch0, ch1, ck = (float)p[P_E14] * (0.35f / 127.f) * dspf_sqrt(br), fk = 0.12f;
+    dspf_svf_t cf, cv1, cv2, ct = {0.f, 0.f, 0.f};   /* the filter's, the formant's two, TUNED's resonator */
+    float tk = 0.f, tg = 0.f;
     uint32_t i, j;
     (void)v;
-    br = eva_clamp(br, 0.f, 1.f);
+    br = dspf_clamp(br, 0.f, 1.f);
     /* the slots: BR_LVL, AMP's threshold; then AMP and FILTER each their curve, at once */
-    x = eva_clamp(br * (float)p[P_E0] / 100.f, 0.f, 1.f);
-    x = eva_clamp((x - 0.04f) / 0.96f, 0.f, 1.f);
+    x = dspf_clamp(br * (float)p[P_E0] / 100.f, 0.f, 1.f);
+    x = dspf_clamp((x - 0.04f) / 0.96f, 0.f, 1.f);
     s->y = x;
     s->za = s->y;
-    af = eva_pow(s->y, 0.66f);                     /* (CURV +0.3: 4^-0.3) */
+    af = dspf_pow(s->y, 0.66f);                     /* (CURV +0.3: 4^-0.3) */
     s->zf = af;
     /* S.E.D.: the gain's law, the filter's depth and floor */
-    amp = eva_pow(s->za, 1.f - 0.75f * sed) * s->hg;
+    amp = dspf_pow(s->za, 1.f - 0.75f * sed) * s->hg;
     oct = 2.3f + 3.f * (1.f - sed) + ((float)p[P_E3] - 64.f) * (3.f / 64.f)
         + s->zf * (0.25f + 0.75f * sed) * 7.f
         + s->sweep * ((float)p[P_E5] - 64.f) * (4.f / 64.f)
         + (float)p[P_E13] / 127.f * (note - 60.f) / 12.f + s->hf;
     s->sweep *= EVA_SWEEP;
-    fc = eva_clamp(20.f * eva_exp2(oct), 20.f, 0.42f * (float)FS);
-    eva_svf(fc, (filt == EF_LP4 ? 1.6f : 2.f) - (filt == EF_LP4 ? 1.4f : 1.9f) * res, &b1, &b2, &b3);
+    fc = dspf_clamp(20.f * dspf_exp2(oct), 20.f, 0.42f * (float)FS);
+    dspf_svf_coef(fc, (filt == EF_LP4 ? 1.6f : 2.f) - (filt == EF_LP4 ? 1.4f : 1.9f) * res, &cf);
+    b1 = cf.a1;
+    b2 = cf.a2;
+    b3 = cf.a3;
     /* the formant: the vowel's two, in between interpolated */
     vw = (float)p[P_E9] * (4.f / 127.f);
     j = (uint32_t)vw;
     if (j > 3u) j = 3u;
     vw -= (float)j;
-    eva_svf(EVA_F1[j] + (EVA_F1[j + 1u] - EVA_F1[j]) * vw, fk, &c1, &c2, &c3);
-    eva_svf(EVA_F2[j] + (EVA_F2[j + 1u] - EVA_F2[j]) * vw, fk, &d1, &d2, &d3);
+    dspf_svf_coef(EVA_F1[j] + (EVA_F1[j + 1u] - EVA_F1[j]) * vw, fk, &cv1);
+    dspf_svf_coef(EVA_F2[j] + (EVA_F2[j + 1u] - EVA_F2[j]) * vw, fk, &cv2);
     /* vibrato: above 55 % breath, deeper and faster blown harder */
-    s->zv = eva_clamp((br - 0.55f) / 0.45f, 0.f, 1.f);
+    s->zv = dspf_clamp((br - 0.55f) / 0.45f, 0.f, 1.f);
     s->vib += (3.f + 5.f * (float)p[P_E12] / 127.f + 1.6f * s->zv) * (float)CTL / (float)FS;
     if (s->vib >= 1.f) s->vib -= 1.f;
     tr = s->vib + 0.25f;                           /* the tremolo: a quarter cycle on (louder as the pitch rises) */
     if (tr >= 1.f) tr -= 1.f;
     tr0 = s->trem;
-    tr1 = s->trem = 1.f - (float)p[P_E11] * (0.5f / 127.f) * s->zv * (0.5f + 0.5f * eva_sin(tr));
-    vibc = (float)p[P_E6] * (60.f / 127.f) * s->zv * eva_sin(s->vib) + s->hp;
+    tr1 = s->trem = 1.f - (float)p[P_E11] * (0.5f / 127.f) * s->zv * (0.5f + 0.5f * dspf_sin(tr));
+    vibc = (float)p[P_E6] * (60.f / 127.f) * s->zv * dspf_sin(s->vib) + s->hp;
     dt = (float)m->inc * (1.f / 4294967296.f) * (1.f + vibc * 0.00057779f);   /* (2^(c/1200) ~ 1 + c ln2/1200) */
     if (wave == EW_DBL) {                          /* DBL: the width swept by an LFO 1.5 Hz at C4, faster up */
-        s->pwm += 1.5f * eva_exp2(0.5f * (note - 60.f) / 12.f) * (float)CTL / (float)FS;
+        s->pwm += 1.5f * dspf_exp2(0.5f * (note - 60.f) / 12.f) * (float)CTL / (float)FS;
         if (s->pwm >= 1.f) s->pwm -= 1.f;
-        w = 0.5f + 0.3f * eva_sin(s->pwm);
+        w = 0.5f + 0.3f * dspf_sin(s->pwm);
     }
     wsd = shp * (0.5f + 0.5f * s->za) * 4.f;       /* the drive, more with breath */
     s->zw = br;                                    /* the waves' breath: all of it, BREATH aside */
@@ -292,10 +221,10 @@ static void eva_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const v
     if (wave == EW_TUNED) {                        /* TUNED: the resonator's damping, 0.5 blown softly .. 0.02 hard,
                                                     * and the gain that keeps it as loud as a saw (its noise power
                                                     * goes with its width: rms ~ sqrt(k fc / fs), measured) */
-        float tf = eva_clamp(dt * (float)FS, 20.f, 0.42f * (float)FS);
-        tk = 0.5f * eva_exp2(-4.644f * s->zw);
-        eva_svf(tf, tk, &t1, &t2, &t3);
-        tg = 0.577f / eva_sqrt(tk * tf / (float)FS);
+        float tf = dspf_clamp(dt * (float)FS, 20.f, 0.42f * (float)FS);
+        tk = 0.5f * dspf_exp2(-4.644f * s->zw);
+        dspf_svf_coef(tf, tk, &ct);
+        tg = 0.577f / dspf_sqrt(tk * tf / (float)FS);
     }
     if (wave == EW_SUPER && s->ss[0] == 0.f)       /* (their phases spread from the start) */
         for (j = 0; j < 6u; j++) s->ss[j] = 0.13f + 0.141f * (float)j;
@@ -308,52 +237,41 @@ static void eva_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const v
     if (s->a1 == 0.f) { s->a1 = b1; s->a2 = b2; s->a3 = b3; }
     for (i = 0; i < n; i++) {
         float f = (float)i / (float)n, a1 = s->a1 + (b1 - s->a1) * f, a2 = s->a2 + (b2 - s->a2) * f;
-        float a3 = s->a3 + (b3 - s->a3) * f, o, v1, v2, v3, y, ch = ch0 + (ch1 - ch0) * f;
+        float a3 = s->a3 + (b3 - s->a3) * f, o, v1, v2, y, ch = ch0 + (ch1 - ch0) * f;
         switch (wave) {
-        case EW_PULSE: o = eva_pulse(s->ph, dt, 0.35f); break;
-        case EW_SQUARE: o = eva_pulse(s->ph, dt, 0.5f); break;
+        case EW_PULSE: o = dspf_pulse(s->ph, dt, 0.35f); break;
+        case EW_SQUARE: o = dspf_pulse(s->ph, dt, 0.5f); break;
         case EW_TRI: o = 1.f - 4.f * (s->ph < 0.5f ? 0.5f - s->ph : s->ph - 0.5f) * 1.f; o = -o; break;
-        case EW_MULTI: o = 0.6f * (eva_saw(s->ph, dt) + eva_pulse(s->ph2, dt, 0.35f)); break;
-        case EW_DBL: o = 0.5f * (eva_saw(s->ph, dt) + eva_pulse(s->ph, dt, w)); break;
+        case EW_MULTI: o = 0.6f * (dspf_saw(s->ph, dt) + dspf_pulse(s->ph2, dt, 0.35f)); break;
+        case EW_DBL: o = 0.5f * (dspf_saw(s->ph, dt) + dspf_pulse(s->ph, dt, w)); break;
         case EW_SYNC: o = eva_sync(s, dt, 1.f + 3.f * s->zw); break;
-        case EW_BPWM: o = eva_pulse(s->ph, dt, w); break;
+        case EW_BPWM: o = dspf_pulse(s->ph, dt, w); break;
         case EW_HARM: o = eva_harm(s->ph, dt, s->nh); break;
         case EW_SUB:
-            o = 0.6f * eva_saw(s->ph, dt) + 0.5f * eva_pulse(s->ph3, 0.5f * dt, 0.5f);
+            o = 0.6f * dspf_saw(s->ph, dt) + 0.5f * dspf_pulse(s->ph3, 0.5f * dt, 0.5f);
             s->ph3 += 0.5f * dt;
             if (s->ph3 >= 1.f) s->ph3 -= 1.f;
             break;
         case EW_SUPER: {
             float sp = 0.0115f * (0.6f + 0.4f * s->zw), d3;   /* (+-20 cents, 12 blown softly) */
-            o = 0.32f * eva_saw(s->ph, dt);
+            o = 0.32f * dspf_saw(s->ph, dt);
             for (j = 0; j < 6u; j++) {
                 d3 = dt * (1.f + sp * EVA_SPREAD[j]);
-                o += 0.22f * eva_saw(s->ss[j], d3);
+                o += 0.22f * dspf_saw(s->ss[j], d3);
                 s->ss[j] += d3;
                 if (s->ss[j] >= 1.f) s->ss[j] -= 1.f;
             }
             break;
         }
-        case EW_WHITE: o = eva_urand(&s->noise); break;
-        case EW_PINK: {                            /* (P. Kellet's three-pole pink, rms 1.73: x 1/3) */
-            float w0 = eva_urand(&s->noise);
-            s->nz[0] = 0.99765f * s->nz[0] + 0.0990460f * w0;
-            s->nz[1] = 0.96300f * s->nz[1] + 0.2965164f * w0;
-            s->nz[2] = 0.57000f * s->nz[2] + 1.0526913f * w0;
-            o = 0.3333f * (s->nz[0] + s->nz[1] + s->nz[2] + 0.1848f * w0);
+        case EW_WHITE: o = dspf_urand(&s->noise); break;
+        case EW_PINK: o = 0.3333f * dspf_pink(s->nz, dspf_urand(&s->noise)); break;   /* (rms 1.73: x 1/3) */
+        case EW_BROWN: o = dspf_brown(&s->nz[3], dspf_urand(&s->noise)); break;
+        case EW_TUNED: {                           /* white noise, its band-pass at the note (k bp: 1 at the centre) */
+            float lp;
+            o = tg * tk * dspf_svf(dspf_urand(&s->noise), ct.a1, ct.a2, ct.a3, s->tz, &lp);
             break;
         }
-        case EW_BROWN:                             /* (leaky: -6 dB/oct above ~35 Hz, rms that of a saw) */
-            o = s->nz[3] = 0.995f * s->nz[3] + 0.1f * eva_urand(&s->noise);
-            break;
-        case EW_TUNED: {                           /* white noise, its band-pass at the note (k v1: 1 at the centre) */
-            float u = eva_urand(&s->noise) - s->tz[1], q1 = t1 * s->tz[0] + t2 * u, q2 = s->tz[1] + t2 * s->tz[0] + t3 * u;
-            s->tz[0] = 2.f * q1 - s->tz[0];
-            s->tz[1] = 2.f * q2 - s->tz[1];
-            o = tg * tk * q1;
-            break;
-        }
-        default: o = eva_saw(s->ph, dt);
+        default: o = dspf_saw(s->ph, dt);
         }
         if (wave != EW_SYNC) {                     /* (SYNC moves its own) */
             s->ph += dt;
@@ -361,18 +279,10 @@ static void eva_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const v
         }
         s->ph2 += dt * 1.0026f;                    /* (MULTI's second wave 4.5 cents up: SPREAD 30 %) */
         if (s->ph2 >= 1.f) s->ph2 -= 1.f;
-        v3 = o - s->ic2;                           /* the filter (TPT state variable) */
-        v1 = a1 * s->ic1 + a2 * v3;
-        v2 = s->ic2 + a2 * s->ic1 + a3 * v3;
-        s->ic1 = 2.f * v1 - s->ic1;
-        s->ic2 = 2.f * v2 - s->ic2;
+        v1 = dspf_svf(o, a1, a2, a3, s->flt, &v2);   /* the filter: v1 its band-pass, v2 its low-pass */
         switch (filt) {
         case EF_LP4:                               /* a second low-pass stage, the same cutoff, no resonance */
-            v3 = v2 - s->ic4;
-            v1 = a1 * s->ic3 + a2 * v3;
-            y = s->ic4 + a2 * s->ic3 + a3 * v3;
-            s->ic3 = 2.f * v1 - s->ic3;
-            s->ic4 = 2.f * y - s->ic4;
+            dspf_svf(v2, a1, a2, a3, s->lp4, &y);
             y *= 1.3f;
             break;
         case EF_BP: y = 2.f * (2.f - 1.9f * res) * v1; break;   /* (k v1: 1 at the centre) */
@@ -380,28 +290,19 @@ static void eva_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const v
         default: y = v2;
         }
         if (wsd > 0.f)                             /* the waveshaper, gain-compensated */
-            y = eva_sat(y * (1.f + wsd)) / (1.f + 0.3f * wsd);
+            y = dspf_sat(y * (1.f + wsd)) / (1.f + 0.3f * wsd);
         if (fmt > 0.f) {                           /* the formant: two band-passes (k 0.12: Q ~8), the second -3 dB */
-            float u, b, q = 0.f;
-            u = y - s->fm[1];
-            b = c1 * s->fm[0] + c2 * u;
-            q += fk * b;
-            s->fm[1] += 2.f * (c2 * s->fm[0] + c3 * u);
-            s->fm[0] = 2.f * b - s->fm[0];
-            u = y - s->fm[3];
-            b = d1 * s->fm[2] + d2 * u;
-            q += 0.7f * fk * b;
-            s->fm[3] += 2.f * (d2 * s->fm[2] + d3 * u);
-            s->fm[2] = 2.f * b - s->fm[2];
+            float lp, q = fk * dspf_svf(y, cv1.a1, cv1.a2, cv1.a3, s->fm1, &lp);
+            q += 0.7f * fk * dspf_svf(y, cv2.a1, cv2.a2, cv2.a3, s->fm2, &lp);
             y += fmt * (2.5f * q - y);
         }
         y *= (g0 + (g1 - g0) * f) * (tr0 + (tr1 - tr0) * f);
         if (ch > 0.f) {                            /* the chiff: high-passed noise, as loud as the breath at once */
-            float z = eva_urand(&s->noise);
-            y += ch * (z - s->fm[4]);
-            s->fm[4] = z;
+            float z = dspf_urand(&s->noise);
+            y += ch * (z - s->chz);
+            s->chz = z;
         }
-        out[i] += voice_amp((int32_t)(eva_clamp(y, -1.5f, 1.5f) * 24576.f), m, i);   /* (the other engines' level) */
+        out[i] += voice_amp((int32_t)(dspf_clamp(y, -1.5f, 1.5f) * 24576.f), m, i);   /* (the other engines' level) */
     }
     s->a1 = b1;
     s->a2 = b2;
