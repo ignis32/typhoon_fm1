@@ -224,6 +224,24 @@ export default async function (t) {
   dmg.presets[0].record = rec0.slice(0, 200) + (rec0.slice(200, 202) === 'ff' ? '00' : 'ff') + rec0.slice(202);
   check(bad && TSX.backupParse(JSON.stringify(dmg)).presets[0].bad === 'damaged record', 'webeditor RESTORE: not a backup, a damaged record: refused');
 
+  // swaps: two user presets (their records), the one playing follows; a factory one; INIT past the factory slots
+  await ed.load(9);
+  const s9 = await ed.read(9), s30 = await ed.read(30);
+  await ed.swap(9, 30);
+  check(TSX.hex(await ed.read(9)) === TSX.hex(s30) && TSX.hex(await ed.read(30)) === TSX.hex(s9) && ed.state.slot === 30 &&
+    t.name(30) === 'RENAMED 1', 'webeditor SWAP: user slots 10 and 31 trade records; RENAMED 1 plays on, from 31');
+  const fk = 70, fn = t.name(fk), un = t.name(9);
+  const fkFactory = ed.kind(fk) === 'factory';
+  await ed.swap(fk, 9);
+  check(fkFactory && t.name(9) === fn && t.name(fk) === un && ex.sim_preset_user(9) && ex.sim_preset_user(fk) && ed.state.slot === 30,
+    `webeditor SWAP: factory slot ${fk + 1} (${fn}) and user slot 10 (${un}); what played (31) loaded again`);
+  const e1 = 94, e2 = 95, emptyOk = ed.kind(e1) === 'empty' && ed.kind(e2) === 'empty';
+  await ed.swap(50, e1);
+  check(emptyOk && t.name(e1) === 'RENAMED 1' && ex.sim_preset_user(50), `webeditor SWAP: user slot 51 into empty ${e1 + 1}; 51 holds INIT`);
+  await ed.swap(e1, e2);
+  check(t.name(e2) === 'RENAMED 1' && !ex.sim_preset_user(e1) && ed.kind(e1) === 'empty',
+    `webeditor SWAP: ${e1 + 1} and empty ${e2 + 1}: ${e1 + 1} empty again (no INIT record past the factory slots)`);
+
   // INIT and copy of a layer
   await ed.load(1);
   ed.set(LN(0, C.P_LEVEL), 5); ed.set(LN(0, C.P_TRANS), 7); ed.set(LN(0, C.P_E0), 99);

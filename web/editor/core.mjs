@@ -497,6 +497,28 @@ export class Editor {
     await this.save(b, null);
   }
 
+  // slot a's preset and slot b's trade places. A slot with no record (a factory preset, or INIT) gets one first, by LOAD
+  // and SAVE into itself; an INIT that lands past the factory slots is deleted there instead (the slot stays empty). The
+  // preset that played goes on playing from its new slot (edits dropped when a LOAD was needed)
+  async swap(a, b) {
+    if (a === b) return;
+    const was = this.state?.slot, empty = (k) => this.kind(k) === 'empty', loaded = { any: false };
+    const recOf = async (k) => {
+      const r = await this.read(k);
+      if (r) return r;
+      await this.load(k);
+      loaded.any = true;
+      await this.save(k, null);
+      return this.read(k);
+    };
+    const ea = empty(a), eb = empty(b), ra = await recOf(a), rb = await recOf(b);
+    const put = async (k, rec, init) => (init && k >= this.info.factory ? this.remove(k) : this.write(k, rec));
+    await put(a, rb, eb);
+    await put(b, ra, ea);
+    if (was === a || was === b) await this.load(was === a ? b : a);
+    else if (loaded.any && was !== undefined) await this.load(was);
+  }
+
   // the user's presets (or those slots) as a tools/presets.py backup (JSON text)
   async backup(slots = null, progress = () => {}) {
     const want = slots ?? this.list.filter((s) => s?.user).map((s) => s.slot), out = [];

@@ -359,22 +359,37 @@ function showState(s) {
   $('save').textContent = `Save to ${s.slot + 1}`;
 }
 
+// a slot's button: click loads it, dragging it onto another swaps the two
+function slotButton(k) {
+  const b = el('button', { class: 'slot', 'data-slot': k, draggable: 'true', onclick: () => loadSlot(k) });
+  b.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/x-slot', String(k)); e.dataTransfer.effectAllowed = 'move'; b.classList.add('dragging'); });
+  b.addEventListener('dragend', () => b.classList.remove('dragging'));
+  b.addEventListener('dragover', (e) => { if (e.dataTransfer.types.includes('text/x-slot')) { e.preventDefault(); b.classList.add('drop'); } });
+  b.addEventListener('dragleave', () => b.classList.remove('drop'));
+  b.addEventListener('drop', (e) => {
+    e.preventDefault();
+    b.classList.remove('drop');
+    const a = Number(e.dataTransfer.getData('text/x-slot'));
+    if (Number.isInteger(a) && a !== k) swapSlots(a, k);
+  });
+  return b;
+}
+
 function showList(list) {
   if (!ed) return;
   const n = ed.info.slots, cur = ed.state?.slot;
   const box = $('slots');
-  if (box.children.length !== n) box.replaceChildren(...Array.from({ length: n }, (_, k) =>
-    el('button', { class: 'slot', 'data-slot': k, onclick: () => loadSlot(k) })));
+  if (box.children.length !== n) box.replaceChildren(...Array.from({ length: n }, (_, k) => slotButton(k)));
   let users = 0;
   for (const b of box.children) {
     const k = Number(b.dataset.slot), s = list[k], kind = ed.kind(k);
     if (kind === 'user') users++;
     b.className = `slot ${kind}${k === cur ? ' cur' : ''}`;
-    b.title = `${k + 1}: ${s?.name || '(nothing)'} — ${kind === 'user' ? 'saved by you' : kind === 'factory' ? 'factory preset' : 'INIT (nothing saved)'} · click: load`;
+    b.title = `${k + 1}: ${s?.name || '(nothing)'} — ${kind === 'user' ? 'saved by you' : kind === 'factory' ? 'factory preset' : 'INIT (nothing saved)'} · click: load · drag onto another: swap`;
     b.replaceChildren(el('b', {}, String(k + 1).padStart(2, '0')), el('span', {}, s?.name || '—'));
   }
   $('list-info').textContent = `${users} yours, ${ed.info.factory} factory slots; the outlined ones are yours`;
-  for (const id of ['rn-slot', 'cp-from', 'cp-to', 'dl-slot', 'sa-slot']) {
+  for (const id of ['rn-slot', 'cp-from', 'cp-to', 'sw-a', 'sw-b', 'dl-slot', 'sa-slot']) {
     const sel = $(id), was = sel.value;
     sel.replaceChildren(...Array.from({ length: n }, (_, k) => el('option', { value: k }, `${slotText(k)}${ed.kind(k) === 'user' ? '' : ed.kind(k) === 'factory' ? ' (factory)' : ''}`)));
     sel.value = was !== '' && Number(was) < n ? was : String(cur ?? 0);
@@ -456,6 +471,16 @@ $('copy').addEventListener('click', () => {
   if (ed.kind(b) === 'user' && !confirm(`Overwrite your ${slotText(b)} with ${slotText(a)}?`)) return;
   if (factory && ed.state.edited && !confirm(`${slotText(a)} is a factory preset: it is copied by loading it and saving it, so the edits of the sound now playing are dropped. Go on?`)) return;
   act(`copy ${a + 1} → ${b + 1}`, () => ed.copy(a, b));
+});
+function swapSlots(a, b) {
+  const needLoad = ed.kind(a) !== 'user' || ed.kind(b) !== 'user' || ed.state.slot === a || ed.state.slot === b;
+  if (needLoad && ed.state.edited && !confirm(`Swapping ${slotText(a)} and ${slotText(b)} loads presets, so the edits of the sound now playing are dropped. Go on?`)) return;
+  act(`swap ${a + 1} ↔ ${b + 1}`, () => ed.swap(a, b).then(() => `${a + 1} ↔ ${b + 1}: ${ed.list[a]?.name || '—'} is ${a + 1} now, ${ed.list[b]?.name || '—'} is ${b + 1}`));
+}
+$('swap').addEventListener('click', () => {
+  const a = Number($('sw-a').value), b = Number($('sw-b').value);
+  if (a === b) { say('swap: two different slots', 'bad'); return; }
+  swapSlots(a, b);
 });
 $('delete').addEventListener('click', () => {
   const k = Number($('dl-slot').value);

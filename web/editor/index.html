@@ -104,6 +104,8 @@
   .slot.user { border-color: var(--amber); }
   .slot.empty { color: var(--dim); }
   .slot.cur { background: var(--amber); color: var(--amber-ink); border-color: var(--amber); }
+  .slot.dragging { opacity: 0.4; }
+  .slot.drop { outline: 2px dashed var(--amber); outline-offset: 1px; }
   .tools { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 8px 18px; margin-top: 12px; }
   .tools .row { gap: 6px 8px; }
   .tools input[type=text] { width: 13ch; text-transform: uppercase; }
@@ -174,6 +176,8 @@
       <div class="tools">
         <div class="row"><b>Rename</b> slot <select id="rn-slot"></select> to <input type="text" id="rn-name" maxlength="12"> <button id="rename">Rename</button></div>
         <div class="row"><b>Copy</b> <select id="cp-from"></select> to <select id="cp-to"></select> <button id="copy">Copy</button></div>
+        <div class="row"><b>Swap</b> <select id="sw-a"></select> and <select id="sw-b"></select> <button id="swap" title="the two trade places (or drag a slot onto another)">Swap</button>
+          <span class="dim small">or drag a slot onto another</span></div>
         <div class="row"><b>Delete</b> <select id="dl-slot"></select> <button id="delete" title="the slot plays its factory preset again (or INIT)">Back to factory</button></div>
         <div class="row"><b>Backup</b> <button id="backup" title="every user preset into a file (tools/presets.py's format)">Backup all</button>
           <button id="restore" title="presets from a backup file into their slots (or others)">Restore…</button>
