@@ -154,6 +154,7 @@ static void midi_send(uint32_t st, uint32_t d1, uint32_t d2)
 #include "core/layers.h"
 #define clamp tp_clamp                             /* (dsp.c's own, as plat.h's: the same; Felucca-Engines' file kept) */
 #include "dsp/dsp.c"
+#include "dsp/dspx.c"                              /* (typhoon's fixed-point shared parts: the SVF's step, the vowels, ...) */
 #include "dsp/dspf.c"                              /* (its float twin: EVA's filter, oscillators, noises) */
 #include "dsp/breathlp.c"                          /* (an engine's breath LP: ERS's, FM's) */
 #include "engines/engines.h"

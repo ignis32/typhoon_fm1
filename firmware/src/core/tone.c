@@ -49,23 +49,10 @@ static void tone_defaults(int16_t *p)              /* the knobs at their type's 
         p[P_TONE_A + k] = tone_desc(p[P_TONE], k)->def;
 }
 
-/* U O A E I, F1 F2 F3 in the cutoff scale << 8 (VOWEL's table, engines/vowel: Peterson & Barney), their gains */
-static const int16_t TN_VF[5][3] = {
-    {11922, 17435, 22332}, {15246, 17253, 22711}, {16527, 18602, 22775}, {14869, 21313, 22859}, {11377, 22446, 23862},
-};
-static const int16_t TN_VG[3] = {32767, 20000, 11000};
-
-/* one step of the trapezoidal SVF: band-pass, low-pass (as engines/ers ers_svf) */
-static inline void tone_svf(const tsvf_t *c, int32_t in, int32_t *s, int32_t *bp, int32_t *lp)
-{
-    int32_t v3 = clamp(in, -65536, 65536) - s[1];
-    int32_t v1 = (c->a1 * s[0] + c->a2 * v3) >> 13;
-    int32_t v2 = s[1] + ((c->a2 * s[0] + c->a3 * v3) >> 13);
-    s[0] = clamp(2 * v1 - s[0], -150000, 150000);
-    s[1] = clamp(2 * v2 - s[1], -150000, 150000);
-    *bp = v1;
-    *lp = v2;
-}
+/* (the vowels and the SVF's step: dsp/dspx.c DSP_VOWEL_CUT, DSP_VOWEL_GAIN, tsvf_step_cl, shared; TONE's own copies
+ * until 2026-10-28) */
+static inline int32_t tone_k(int32_t res) { return 7200 - clamp(res, 0, 127) * 52; }   /* RES: damping 1.76 .. 0.13
+                                                                                         * (Q12; FILTER's, TALK's) */
 
 /* layer l's block (buf, n samples, after its engine): through its TONE. breath Q15; m its modulation (inc, amp) */
 static void tone_block(uint32_t l, int32_t *buf, uint32_t n, const int16_t *p, const vmod_t *m, int32_t breath)
@@ -80,10 +67,10 @@ static void tone_block(uint32_t l, int32_t *buf, uint32_t n, const int16_t *p, c
     }
     switch (type) {
     case TN_FILTER: {
-        int32_t k = 7200 - clamp(b, 0, 127) * 52, mode = clamp(c, 0, 2);   /* RES: damping 1.76 .. 0.13 (Q12) */
+        int32_t k = tone_k(b), mode = clamp(c, 0, 2);
         tsvf_coef_k(&f[0], clamp((a << 8) + m->cutoff, 0, 127 << 8), k);
         for (i = 0; i < n; i++) {
-            tone_svf(&f[0], buf[i], tone_st[l].f[0], &bp, &lp);
+            tsvf_step_cl(&f[0], buf[i], tone_st[l].f[0], &bp, &lp);
             buf[i] = mode == 0 ? lp : mode == 1 ? (bp * k) >> 12 : buf[i] - ((bp * k) >> 12) - lp;
         }
         break;
@@ -96,23 +83,23 @@ static void tone_block(uint32_t l, int32_t *buf, uint32_t n, const int16_t *p, c
         tone_st[l].sw -= (tone_st[l].sw * (8 + c * 3)) >> 12;   /* SPEED 0: ~1 s .. 127: ~60 ms */
         tsvf_coef_k(&f[0], clamp((a << 8) + ((tone_st[l].sw * b) >> 8) + m->cutoff, 0, 127 << 8), 2600);
         for (i = 0; i < n; i++) {
-            tone_svf(&f[0], buf[i], tone_st[l].f[0], &bp, &lp);
+            tsvf_step_cl(&f[0], buf[i], tone_st[l].f[0], &bp, &lp);
             buf[i] = lp;
         }
         break;
     }
     case TN_TALK: {                                /* the vowel: VOWEL + breath x DEPTH, U .. I */
         int32_t pos = clamp((a << 8) + ((breath * b) >> 6), 0, 127 << 8), seg = pos * 4 / (127 << 8), frac;
-        int32_t k = 7200 - clamp(c, 0, 127) * 52;
+        int32_t k = tone_k(c);
         if (seg > 3) seg = 3;
         frac = (pos - seg * (127 << 8) / 4) * 4;
         for (j = 0; j < 3u; j++)
-            tsvf_coef_k(&f[j], TN_VF[seg][j] + (((TN_VF[seg + 1][j] - TN_VF[seg][j]) * (frac >> 8)) / 127), k);
+            tsvf_coef_k(&f[j], DSP_VOWEL_CUT[seg][j] + (((DSP_VOWEL_CUT[seg + 1][j] - DSP_VOWEL_CUT[seg][j]) * (frac >> 8)) / 127), k);
         for (i = 0; i < n; i++) {
             int32_t y = 0;
             for (j = 0; j < 3u; j++) {
-                tone_svf(&f[j], buf[i] >> 1, tone_st[l].f[j], &bp, &lp);
-                y += (bp * TN_VG[j]) >> 15;
+                tsvf_step_cl(&f[j], buf[i] >> 1, tone_st[l].f[j], &bp, &lp);
+                y += (bp * DSP_VOWEL_GAIN[j]) >> 15;
             }
             buf[i] = ((y * k) >> 12) << 1;
         }

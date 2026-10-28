@@ -21,16 +21,13 @@ static const param_desc_t ANALOG_SUB = {"SUB", F_PCT, 0, 127, 64, 0, 0};      /*
  * RES sets: 2 at RES 0, ~0.15 at 127), so the soft knee after them and the level stay as LP's */
 static inline int32_t analog_tap(const tsvf_t *c, int32_t k, int32_t in, int32_t *ic1, int32_t *ic2, uint32_t ft)
 {
-    int32_t v3 = in - *ic2;
-    int32_t v1 = (c->a1 * *ic1 + c->a2 * v3) >> 13;
-    int32_t v2 = *ic2 + ((c->a2 * *ic1 + c->a3 * v3) >> 13);
-    *ic1 = clamp(2 * v1 - *ic1, -150000, 150000);
-    *ic2 = clamp(2 * v2 - *ic2, -150000, 150000);
+    int32_t v1, v2 = tsvf_step(c, in, ic1, ic2, &v1);   /* (the step: dsp/dspx.c, shared; written out here until
+                                                    * 2026-10-28) */
     if (!ft)
         return v2;                                    /* LP: tsvf_lp's (the same steps) */
     return ft == 1u ? v1 : in - ((k * v1) >> 12) - v2;
 }
-#define ANALOG_K(res) (8192 - (res) * 7600 / 127)     /* tsvf_coef's damping, Q12 */
+#define ANALOG_K(res) tsvf_k(res)                     /* tsvf_coef's damping, Q12 (dsp/dspx.c) */
 
 static const param_desc_t *analog_desc(const track_t *t, uint32_t k)
 {
@@ -62,7 +59,7 @@ static __attribute__((noinline)) void analog_render_x(track_t *t, voice_t *v, in
     int32_t cut = (p[P_E4] << 8) + m->cutoff + (p[P_E7] * (v->pitch16 - 60 * 16) >> 4);
     tsvf_t flt;
     int32_t drive = 32768 + p[P_E6] * 512;
-    int32_t m2 = mix * 258, m1 = 32767 - m2;
+    int32_t m2 = Q15_127(mix), m1 = 32767 - m2;
     int32_t nz = noise * 200, drv = p[P_E6];
     uint32_t ph0 = v->ph[0], ph1 = v->ph[1], inc1 = m->inc, inc2;
     int32_t ic1 = v->s[0], ic2 = v->s[1], nst = v->s[2];
@@ -129,7 +126,7 @@ static inline __attribute__((always_inline)) void analog_osc(track_t *t, voice_t
     uint32_t inc1 = m->inc;
     uint32_t inc2 = det ? cents_inc(m->pitch16, det, 0) : inc1;      /* DTN in cents */
     uint32_t pw = 0x80000000u + (uint32_t)((m->shape - (64 << 8)) << 15);
-    int32_t m2 = mix * 258, m1 = 32767 - m2;                    /* osc mix Q15 */
+    int32_t m2 = Q15_127(mix), m1 = 32767 - m2;                 /* osc mix Q15 */
     int32_t nz = noise * 200, drv = p[P_E6];
     uint32_t ph0 = v->ph[0], ph1 = v->ph[1];                  /* state in locals: out[] may alias v->s[] */
     int32_t ic1 = v->s[0], ic2 = v->s[1], nst = v->s[2];

@@ -188,8 +188,9 @@ static const float EVA_SPREAD[6] = {-1.f, -0.62f, -0.3f, 0.29f, 0.6f, 0.98f};   
 #define EVA_OUT_CLIP 1.5f                          /* clipped past 1.5 (a resonant peak's ceiling) */
 /* (the humanise, a random pitch / cutoff / level on each tongued note, 15 % fixed and hidden: gone 2026-10-28; each
  * fingering's own fixed offsets are the layer's QUIRKS now, core/layers.c) */
-/* the formants (Hz) of A E I O U (a man's voice: Peterson & Barney's averages) */
-static const float EVA_F1[5] = {730.f, 530.f, 270.f, 570.f, 300.f}, EVA_F2[5] = {1090.f, 1840.f, 2290.f, 840.f, 870.f};
+/* VOWEL's order, A E I O U (its knob goes from A to U), from the shared table (dsp/dspx.c DSP_VOWEL_HZ: F1, F2; F3
+ * not used); EVA's own table of the same until 2026-10-28 */
+static const uint8_t EVA_VOWEL[5] = {DSP_VOWEL_A, DSP_VOWEL_E, DSP_VOWEL_I, DSP_VOWEL_O, DSP_VOWEL_U};
 /* ==== */
 
 /* HARMONIC: sin k x, k = 1 .. n (the last one faded in), 1 / k each, below 0.45 fs (Chebyshev: one sine a sample) */
@@ -283,8 +284,11 @@ static void eva_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const v
     j = (uint32_t)vw;
     if (j > 3u) j = 3u;
     vw -= (float)j;
-    dspf_svf_coef(EVA_F1[j] + (EVA_F1[j + 1u] - EVA_F1[j]) * vw, fk, &cv1);
-    dspf_svf_coef(EVA_F2[j] + (EVA_F2[j + 1u] - EVA_F2[j]) * vw, fk, &cv2);
+    {
+        const float *a = DSP_VOWEL_HZ[EVA_VOWEL[j]], *b = DSP_VOWEL_HZ[EVA_VOWEL[j + 1u]];
+        dspf_svf_coef(a[0] + (b[0] - a[0]) * vw, fk, &cv1);
+        dspf_svf_coef(a[1] + (b[1] - a[1]) * vw, fk, &cv2);
+    }
     /* vibrato: above 55 % breath, deeper and faster blown harder; in over VIB SWELL (64: 400 ms, out in 150) */
     x = dspf_clamp((br - EVA_VIB_ONSET) / (1.f - EVA_VIB_ONSET), 0.f, 1.f);
     if (p[P_E16]) {

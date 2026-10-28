@@ -51,7 +51,7 @@ static void fx_drive(int32_t *l, int32_t *r, int32_t breath)
 
 static void fx_delay(int32_t *l, int32_t *r)
 {
-    int32_t mixq = sv(S_DLY_MIX) * 258, fb = sv(S_DLY_FB) * 250, k = 2000 + sv(S_DLY_TONE) * 220;   /* Q15 */
+    int32_t mixq = Q15_127(sv(S_DLY_MIX)), fb = sv(S_DLY_FB) * 250, k = 2000 + sv(S_DLY_TONE) * 220;   /* Q15 */
     int32_t want = (int32_t)(time_ms(sv(S_DLY_TIME)) * 441u / 10u), step;
     uint32_t i, w = fx.dly_w;
     if (mixq <= 0) {
@@ -108,7 +108,7 @@ static int32_t dt_voice(uint32_t w, uint32_t p, uint32_t base16, int up)
 }
 static void fx_detune(int32_t *l, int32_t *r)
 {
-    int32_t mixq = sv(S_DT_MIX) * 258, half = sv(S_DT_WIDTH) * 129;   /* Q15; half the width, Q15 */
+    int32_t mixq = Q15_127(sv(S_DT_MIX)), half = sv(S_DT_WIDTH) * 129;   /* Q15; half the width, Q15 */
     uint32_t inc = (uint32_t)sv(S_DT_CENTS) * 2423u;   /* the window's phase a sample: cents x ln2 / 1200 / DT_W x 2^32 */
     uint32_t base16 = ((uint32_t)sv(S_DT_DELAY) * 441u / 10u + 2u) << 16, i, w = fx.dt_w;
     if (mixq <= 0) {

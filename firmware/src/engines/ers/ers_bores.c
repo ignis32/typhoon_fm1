@@ -232,7 +232,7 @@ static void ers_bore_sax(ers_blk_t *b, const ers_valve_t *k, int32_t pm0, int32_
     tsvf_coef(&cn, SAX_NZC, SAX_NZQ);
     for (i = 0; i < b->n; i++) {
         int32_t pi = (ers_p(b, i) * g) >> 14, pc = pi < ERS_ONE ? pi : ERS_ONE, o0, tmp, pmb, pm, bp, lp, air;
-        ers_svf(&cn, ers_air(st, 18), st->sn, &bp, &lp);
+        tsvf_step_cl(&cn, ers_air(st, 18), st->sn, &bp, &lp);
         air = (bp * pc) >> 14;
         pm = pi ? pm0 + ((pi * pmk) >> 14) + ((air * SAX_NZI) >> 14) : 0;
         o0 = ers_tap(st->bore, ERS_BORE - 1u, w, d0);

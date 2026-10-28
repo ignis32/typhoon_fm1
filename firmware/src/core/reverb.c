@@ -69,7 +69,7 @@ static uint32_t rv_e_decay(void)
 
 static void fx_reverb(int32_t *l, int32_t *r)
 {
-    int32_t mixq = sv(S_REV_MIX) * 258;
+    int32_t mixq = Q15_127(sv(S_REV_MIX));
     uint32_t type = sv(S_REV_TYPE) == RT_PLATE ? RT_PLATE : RT_HALL, pd = (uint32_t)sv(S_REV_PRE) * 441u / 10u;   /* (a
                                                     * record from before 2026-10-23 with OLD, 2: HALL) */
     if (mixq <= 0) {

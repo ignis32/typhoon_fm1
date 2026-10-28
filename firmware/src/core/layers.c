@@ -50,7 +50,7 @@ static volatile struct {
     uint8_t missing[NLAYER];                       /* the layer's engine id is not in this build */
 } perf_ui = {255};
 
-#define BLOCKS_PER_S (FS / CTL)                    /* control blocks a second (1378) */
+/* (BLOCKS_PER_S, the control blocks a second, and pole_k, a one-pole's step for a time: dsp/dspx.c, shared) */
 
 static struct {
     uint8_t stack[8], n;                           /* held notes, the last on top */
@@ -108,12 +108,6 @@ static uint32_t env_ms(int32_t v)
     static const uint16_t T[9] = {0, 5, 15, 40, 100, 250, 600, 1500, 4000};   /* every 16 steps */
     uint32_t i = (uint32_t)clamp(v, 0, 127), k = i >> 4, f = i & 15u;
     return T[k] + (((uint32_t)(T[k + 1] - T[k]) * f) >> 4);
-}
-/* a one-pole's step per control block (Q15) for a time constant in ms */
-static int32_t pole_k(uint32_t ms)
-{
-    uint32_t den = ms * (BLOCKS_PER_S / 10u) / 100u + 1u;   /* blocks in ms */
-    return den <= 1u ? 32768 : (int32_t)(32768u / den);
 }
 
 /* one control block of a layer's volume envelope (the audio, and the LFO page's graph: the same steps). DELAY, then
@@ -211,7 +205,7 @@ static void layer_quirk(const int16_t *p, int32_t *fine, int32_t *gain)
     uint32_t h = quirk_hash(pf.note, (uint32_t)p[P_QSET]);
     int32_t q = p[P_QUIRKS], u1 = (int32_t)(h & 0xFFFFu) - 32768, u2 = (int32_t)(h >> 16) - 32768;   /* -1 .. 1, Q15 */
     int32_t c16 = u1 * QUIRK_CENTS * q / (2048 * 100);   /* 1/16 cents */
-    *fine = c16 * 2367 / 16000;                    /* (cents -> 1/4096 of the increment: x 2.367) */
+    *fine = CENTS16_FINE(c16);
     *gain = 32768 + (u2 * QUIRK_GAIN_Q15 / 32768) * q / 100;
 }
 
@@ -293,7 +287,7 @@ static void notes_event(const pev_t *ev)
              * small bend (the tilt's: 10 % of 2 st) moves smoothly, not in 6.25-cent steps */
             int32_t c16 = ((((int32_t)ev->b << 7 | ev->a) - 8192) * gpar[G_BEND] * 1600) / 8192;
             pf.bend16 = c16 / 100;
-            pf.bend_fine = (c16 - pf.bend16 * 100) * 2367 / 16000;
+            pf.bend_fine = CENTS16_FINE(c16 - pf.bend16 * 100);
         }
         break;
     }
@@ -394,7 +388,7 @@ static void layers_block(int32_t *outl, int32_t *outr)
         if (p[P_QUIRKS])
             layer_quirk(p, &qfine, &qgain);        /* (this fingering's own pitch and level) */
         m.pitch16 = v->pitch16 + pf.bend16;
-        m.fine = p[P_FINE] * 2367 / 1000 + pf.bend_fine + qfine;   /* cents -> 1/4096 of the increment; the bend's
+        m.fine = CENTS_FINE(p[P_FINE]) + pf.bend_fine + qfine;   /* cents -> 1/4096 of the increment; the bend's
                                                     * rest; the quirk */
         m.inc = base + (uint32_t)((int32_t)(base >> 12) * m.fine);
         m.amp0 = a0;

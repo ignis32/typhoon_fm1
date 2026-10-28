@@ -128,13 +128,6 @@ static void ers_note_on(track_t *t, voice_t *v)
         ers_st[(uint32_t)(t - trk) % NLAYER].ch = 1764;   /* JET: a 40 ms chiff (a fresh note only: no legato) */
 }
 
-/* a one-pole's step a block (Q14) for a time of ms: 16384 / (1 + ms x 1.378 blocks a ms), rounded */
-static int32_t ers_pole(int32_t ms)
-{
-    int32_t d = 1000 + ms * 1378;
-    return (16384000 + d / 2) / d;
-}
-
 static void ers_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const vmod_t *m)
 {
     const int16_t *p = t->p;
@@ -160,7 +153,7 @@ static void ers_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const v
         int32_t x = clamp((pr - 9011) * 16384 / 7373, 0, ERS_ONE), sw = p[P_E19];
         if (sw) {                                  /* (SWELL 64: 400 ms in, 150 out: 30 and 79, as it was fixed) */
             int32_t ms = 400 * sw * sw / 4096;
-            st->zv += ((x - st->zv) * ers_pole(x > st->zv ? ms : ms * 3 / 8)) >> 14;
+            st->zv += ((x - st->zv) * pole_q14(x > st->zv ? ms : ms * 3 / 8)) >> 14;   /* (dsp/dspx.c) */
         } else
             st->zv = x;
         st->vph += (uint32_t)(3u * 3117u + (uint32_t)p[P_E9] * 15340u / 127u) * 1000u;   /* 3 .. 8 Hz a block */
@@ -170,7 +163,7 @@ static void ers_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const v
         c8 += ((p[P_E14] - 64) * 122 * (pr - (64 << 8))) >> 14;
     if (p[P_E15]) {                                /* DRIFT: a new place every ~0.4 s, glided to */
         if (--st->dn <= 0) {
-            st->dt = (int32_t)noise32(&st->seed) >> 17;   /* +-1, Q14 */
+            st->dt = noise_q14(&st->seed);         /* +-1, Q14 */
             st->dn = 512;
         }
         st->dr += ((st->dt - st->dr) * 66) >> 14;

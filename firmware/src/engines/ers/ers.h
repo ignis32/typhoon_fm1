@@ -158,17 +158,7 @@ static inline int32_t ers_air(ers_t *st, int sh) { return (((int32_t)noise32(&st
 static inline int16_t ers_s16(int32_t x) { return (int16_t)clamp(x >> 1, -32767, 32767); }
 static inline uint32_t ers_len(int32_t d8, uint32_t size) { return (uint32_t)clamp(d8, 256, (int32_t)(size - 2u) << 8); }
 
-/* one step of the trapezoidal SVF: band-pass and low-pass (high-pass = in - k bp - lp) */
-static inline void ers_svf(const tsvf_t *c, int32_t in, int32_t *s, int32_t *bp, int32_t *lp)
-{
-    int32_t v3 = clamp(in, -65536, 65536) - s[1];
-    int32_t v1 = (c->a1 * s[0] + c->a2 * v3) >> 13;
-    int32_t v2 = s[1] + ((c->a2 * s[0] + c->a3 * v3) >> 13);
-    s[0] = clamp(2 * v1 - s[0], -150000, 150000);
-    s[1] = clamp(2 * v2 - s[1], -150000, 150000);
-    *bp = v1;
-    *lp = v2;
-}
+/* (the SVF's step, band-pass and low-pass: dsp/dspx.c tsvf_step_cl, shared; ERS's own copy until 2026-10-28) */
 
 static uint32_t ers_isqrt(uint32_t x)
 {

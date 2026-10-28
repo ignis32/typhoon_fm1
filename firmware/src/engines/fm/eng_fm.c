@@ -34,7 +34,7 @@ static void fm_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const vm
     int32_t idx = clamp((p[P_E0] << 8) + m->shape - (64 << 8), 0, 127 << 8);   /* 0..32512 */
     int32_t fb = p[P_E2] << 5, air = p[P_E4] << 7, i0 = v->s[2], di;   /* (AIR: half what it was, 2026-10-18) */
     uint32_t inc_m = (uint32_t)(umul64(m->inc, FM_RATIO_Q8[p[P_E1] & 7]) >> 8), pc = v->ph[0], pm = v->ph[1], i;
-    inc_m += (uint32_t)((int32_t)(inc_m >> 12) * (p[P_E3] * 2367 / 1000));   /* DETUNE: cents */
+    inc_m += (uint32_t)((int32_t)(inc_m >> 12) * CENTS_FINE(p[P_E3]));   /* DETUNE: cents */
     if (p[P_E5] > 0) {                                 /* KEYTRK: the index halves an octave and a half above C4 */
         int32_t over = clamp(m->pitch16 - 60 * 16, 0, 36 * 16), f = over * p[P_E5] / 146;   /* 0..~501 of 1024 */
         idx -= (idx * f) >> 10;                        /* (32-bit: no 64-bit division on this chip) */
@@ -45,7 +45,7 @@ static void fm_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const vm
         int32_t k = (i0 + di * (int32_t)i) >> 3;       /* 0..4064 */
         v->s[0] = mo >> 6;
         s = osc_sine(pc + ((uint32_t)(mo * k) << 5));  /* carrier, phase-modulated: wraps are the modulo of a phase */
-        s += (((int32_t)noise32(&v->s[1]) >> 17) * air) >> 15;
+        s += (noise_q14(&v->s[1]) * air) >> 15;
         pc += m->inc;
         pm += inc_m;
         out[i] += voice_amp((s * 3) >> 2, m, i);

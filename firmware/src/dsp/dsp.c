@@ -95,20 +95,10 @@ static inline void tsvf_coef_k(tsvf_t *c, int32_t cut, int32_t k)   /* cut: 0..1
     c->a2 = (c->a1 * g) >> 12;
     c->a3 = (c->a2 * g) >> 12;
 }
-static inline void tsvf_coef(tsvf_t *c, int32_t cut, int32_t reso)   /* reso 0..127: damping 2.0 .. ~0.15 */
-{
-    tsvf_coef_k(c, cut, 8192 - reso * 7600 / 127);
-}
+/* (tsvf_coef, RES as the damping: typhoon moved it to dsp/dspx.c beside tsvf_k, 2026-10-28, unchanged) */
 
-static inline int32_t tsvf_lp(const tsvf_t *c, int32_t in, int32_t *ic1, int32_t *ic2)
-{
-    int32_t v3 = in - *ic2;
-    int32_t v1 = (c->a1 * *ic1 + c->a2 * v3) >> 13;
-    int32_t v2 = *ic2 + ((c->a2 * *ic1 + c->a3 * v3) >> 13);
-    *ic1 = clamp(2 * v1 - *ic1, -150000, 150000);
-    *ic2 = clamp(2 * v2 - *ic2, -150000, 150000);
-    return v2;
-}
+/* (tsvf_lp, the step: typhoon moved it to dsp/dspx.c, 2026-10-28, beside the step with its band-pass that its
+ * engines needed, unchanged) */
 
 /* amplitude ramp over the block. Blocks are always CTL long, so x / CTL is a
  * shift (rounded towards zero, as a division); the compiler at -Os keeps

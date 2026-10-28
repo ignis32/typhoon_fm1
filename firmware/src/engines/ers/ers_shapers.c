@@ -66,24 +66,24 @@ static inline int32_t ers_shape_sample(ers_blk_t *b, const ers_shp_t *s, int32_t
     case SH_FILTER: return tsvf_lp(&s->c[0], x, &st->sh[0][0], &st->sh[0][1]);
     case SH_BELL:                                  /* less low end (a one-pole's low part out), a presence peak */
         st->sh[1][0] += ((x - st->sh[1][0]) * 700) >> 14;
-        ers_svf(&s->c[0], x, st->sh[0], &bp, &lp);
+        tsvf_step_cl(&s->c[0], x, st->sh[0], &bp, &lp);
         return x - ((st->sh[1][0] * a14) >> 15) + ((((bp * sk) >> 12) * a14) >> 15);
     case SH_MUTE:
-        ers_svf(&s->c[0], x, st->sh[0], &bp, &lp);
+        tsvf_step_cl(&s->c[0], x, st->sh[0], &bp, &lp);
         return (lp * s->gl + ((bp * sk) >> 12) * s->gb + (x - ((sk * bp) >> 12) - lp) * s->gh) >> 14;
     case SH_WAH:
-        ers_svf(&s->c[0], x, st->sh[0], &bp, &lp);
+        tsvf_step_cl(&s->c[0], x, st->sh[0], &bp, &lp);
         return lp + ((bp * sk) >> 12);
     case SH_BODY:
         y = x;
         for (j = 0; j < 3u; j++) {
-            ers_svf(&s->c[j], x, st->sh[j], &bp, &lp);
+            tsvf_step_cl(&s->c[j], x, st->sh[j], &bp, &lp);
             y += (((((bp * 1000) >> 12) * BODY_G[j]) >> 14) * a14) >> 14;
         }
         return y;
     case SH_AIR: {                                 /* breath noise around twice the note (half, 2026-10-18) */
         int32_t nz = (((ers_air(st, 18) * ers_p(b, i)) >> 14) * a14) >> 14;
-        ers_svf(&s->c[0], nz, st->sh[0], &bp, &lp);
+        tsvf_step_cl(&s->c[0], nz, st->sh[0], &bp, &lp);
         return x + (((bp * sk) >> 12) >> 1);
     }
     case SH_GROWL:                                 /* (the flutter is in the pressure) + a half-pitch roughness */

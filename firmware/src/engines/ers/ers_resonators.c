@@ -5,11 +5,7 @@
 
 /* the modes above the fundamental in the cutoff scale (<< 8): 32512 ln(r) / ln(16000 / 30) */
 static const int16_t ERS_MODE[ERS_NM] = {0, 5250, 8735, 11337, 13421};
-/* U O A E I, F1 F2 F3 (VOWEL's table, eng_vowel.c: Peterson & Barney) */
-static const int16_t ERS_VF[5][3] = {
-    {11922, 17435, 22332}, {15246, 17253, 22711}, {16527, 18602, 22775}, {14869, 21313, 22859}, {11377, 22446, 23862},
-};
-static const int16_t ERS_VG[3] = {32767, 20000, 11000};
+/* (the vowels, U O A E I, F1 F2 F3, and their gains: dsp/dspx.c DSP_VOWEL_CUT, DSP_VOWEL_GAIN, shared) */
 
 /* a comb a period long (HOLE: half, inverted: odd harmonics); BRASS with its bell */
 static void ers_comb(ers_blk_t *b)
@@ -56,7 +52,7 @@ static void ers_modal(ers_blk_t *b)
         int32_t in = b->x[i] >> 1, y = 0, bp, lp;
         for (j = 0; j < ERS_NM; j++)
             if (g[j]) {
-                ers_svf(&c[j], in, b->st->md[j], &bp, &lp);
+                tsvf_step_cl(&c[j], in, b->st->md[j], &bp, &lp);
                 y += (bp * g[j]) >> 14;
             }
         b->x[i] = y << 1;
@@ -72,12 +68,12 @@ static void ers_formant(ers_blk_t *b)
     if (seg > 3) seg = 3;
     frac = (pos - seg * (127 << 8) / 4) * 4;
     for (j = 0; j < 3u; j++)
-        tsvf_coef_k(&c[j], ERS_VF[seg][j] + (((ERS_VF[seg + 1][j] - ERS_VF[seg][j]) * (frac >> 8)) / 127), k);
+        tsvf_coef_k(&c[j], DSP_VOWEL_CUT[seg][j] + (((DSP_VOWEL_CUT[seg + 1][j] - DSP_VOWEL_CUT[seg][j]) * (frac >> 8)) / 127), k);
     for (i = 0; i < b->n; i++) {
         int32_t in = b->x[i] >> 1, y = 0, bp, lp;
         for (j = 0; j < 3u; j++) {
-            ers_svf(&c[j], in, b->st->fm[j], &bp, &lp);
-            y += (bp * ERS_VG[j]) >> 15;
+            tsvf_step_cl(&c[j], in, b->st->fm[j], &bp, &lp);
+            y += (bp * DSP_VOWEL_GAIN[j]) >> 15;
         }
         b->x[i] = ((y * k) >> 12) << 1;
     }
@@ -92,7 +88,7 @@ static void ers_cavity(ers_blk_t *b)
     tsvf_t c;
     tsvf_coef_k(&c, (33 << 8) + b->bri * 150, k);
     for (i = 0; i < b->n; i++) {
-        ers_svf(&c, b->x[i], b->st->md[0], &bp, &lp);
+        tsvf_step_cl(&c, b->x[i], b->st->md[0], &bp, &lp);
         b->x[i] = (b->x[i] >> 1) + ((bp * k) >> 12);
     }
 }

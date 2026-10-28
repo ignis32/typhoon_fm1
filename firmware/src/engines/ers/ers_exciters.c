@@ -11,7 +11,7 @@ static inline int32_t ers_exc_sample(ers_blk_t *b, uint32_t ph, int32_t pi, cons
     int32_t col = b->col, e, bp, lp;
     switch (b->exc) {
     case EX_NOISE:
-        st->nlp += ((((int32_t)noise32(&st->seed) >> 17) - st->nlp) * (1500 + col * 245)) >> 15;
+        st->nlp += ((noise_q14(&st->seed) - st->nlp) * (1500 + col * 245)) >> 15;
         return st->nlp;
     case EX_REED:                                  /* a saw squeezed by the reed: buzzier as it stiffens */
         return softclip((osc_saw(ph, m->inc) * (256 + col * 16)) >> 8) >> 1;
@@ -24,7 +24,7 @@ static inline int32_t ers_exc_sample(ers_blk_t *b, uint32_t ph, int32_t pi, cons
     case EX_LIP:                                   /* a buzz: the pulse narrows as it is blown harder (brighter) */
         return osc_pulse(ph, m->inc, 0x80000000u - (uint32_t)clamp(pi, 0, ERS_ONE) * 98304u) >> 1;
     case EX_JET:                                   /* an edge tone: noise at the note, and a soft whistle */
-        ers_svf(ce, (int32_t)noise32(&st->seed) >> 17, st->ex, &bp, &lp);
+        tsvf_step_cl(ce, noise_q14(&st->seed), st->ex, &bp, &lp);
         return (((((bp * 400) >> 12) * 3) * col) >> 7) + (((osc_sine(ph) >> 2) * (127 - col)) >> 7);
     default:                                       /* OSC: saw .. pulse */
         e = osc_saw(ph, m->inc);
