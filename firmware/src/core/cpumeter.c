@@ -18,7 +18,8 @@ static struct {
 /* the audio interrupt: a block of n frames took us microseconds */
 static inline void cpum_block(uint32_t us, uint32_t n)
 {
-    uint32_t pm = n ? us * 10000u / (n * 1000000u / FS) : 0;   /* % x 10 of the block's time */
+    uint32_t pm = n ? us * 1000u / (n * 1000000u / FS) : 0;   /* % x 10 of the block's time (x 10000 until 0.3.26:
+                                                                * every worst read 10 x too high) */
     cpum.n = n;
     if (pm > cpum.sec) cpum.sec = pm;
     if (pm > cpum.peak) cpum.peak = pm;
