@@ -1,2 +1,2 @@
-# the smallest build: one engine
-sine
+# the smallest build: one engine (FM: the INIT sound, one sine)
+fm

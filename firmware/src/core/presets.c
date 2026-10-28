@@ -60,10 +60,15 @@ typedef struct { const char *name; fp_t f[24]; } factory_t;
 #define ENG(l, id, pre) {FP_ENG, (l), (id), (pre)}   /* layer l plays engine id, with that engine's preset pre */
 #define PAR(l, i, v) {FP_PAR, (l), (i), (v)}
 #define SND(i, v) {FP_SND, 0, (i), (v)}              /* the preset owns i's group, i = v */
+/* layer l as SINE's BREATHY was (SINE removed 2026-10-28): FM at RATIO 1 with a little index is a sine with its 2nd
+ * harmonic (SINE's 2ND 40: J1 / J0 ~ 0.31, INDEX 12), breath bringing more of it (SINE's +30: BR>SHP 10), AIR 30
+ * (FM's AIR is SINE's noise at the same scale) */
+#define FM_SINE2(l) ENG(l, ENG_ID_FM, 0), PAR(l, P_E0, 12), PAR(l, P_E2, 0), PAR(l, P_E4, 30), PAR(l, P_E5, 0), \
+                    PAR(l, P_BR_SHP, 10)
 static const factory_t FACTORY[] = {
     /* 1 .. 14: the main ones */
     {"RECORDER", {ENG(0, ENG_ID_ERS, 19), SND(S_REV_TYPE, 1), SND(S_REV_MIX, 30), SND(S_REV_PRE, 20)}},
-    {"PIPE FLUTE", {ENG(0, ENG_ID_ERS, 0), ENG(1, ENG_ID_SINE, 1), PAR(1, P_LEVEL, 20), SND(S_REV_MIX, 40)}},
+    {"PIPE FLUTE", {ENG(0, ENG_ID_ERS, 0), FM_SINE2(1), PAR(1, P_LEVEL, 20), SND(S_REV_MIX, 40)}},
     /* CLARINET (made on the device, then taken in here): ERS CLARINET through FORMANT,
      * an ERS OSC layer under it.
      * Every value of the groups it owns is given: owning a group starts from the global copy, whatever that is */
@@ -79,8 +84,9 @@ static const factory_t FACTORY[] = {
                       PAR(1, P_LEVEL, 55), PAR(1, P_PAN, 18), SND(S_REV_TYPE, 1), SND(S_REV_MIX, 36), SND(S_REV_PRE, 35)}},
     {"BOWED CELLO", {ENG(0, ENG_ID_ERS, 8), SND(S_VOLUME, 40), PAR(0, P_TRANS, -24), PAR(0, P_E6, 7), PAR(0, P_E7, 50),
                      SND(S_REV_TYPE, 1), SND(S_REV_MIX, 36), SND(S_REV_PRE, 30)}},
-    {"VOX FLUTE", {ENG(0, ENG_ID_VOWEL, 0), ENG(1, ENG_ID_SINE, 1), PAR(1, P_LEVEL, 60), ENG(2, ENG_ID_OFF, 0),
-                   PAR(2, P_LEVEL, 12), SND(S_REV_MIX, 40)}},
+    /* (a voice: VOWEL until 2026-10-28, now EVA VOX, EVA's own "ah") */
+    {"VOX FLUTE", {ENG(0, ENG_ID_EVA, 5), FM_SINE2(1), PAR(1, P_LEVEL, 60), ENG(2, ENG_ID_OFF, 0),
+                   PAR(2, P_LEVEL, 12), SND(S_REV_MIX, 40), SND(S_VOLUME, 127)}},   /* (VOLUME: as loud as with VOWEL) */
     {"FM TUBE", {ENG(0, ENG_ID_ERS, 27), SND(S_VOLUME, 46), SND(S_REV_TYPE, 0), SND(S_REV_MIX, 26)}},
     {"FM WOOD", {ENG(0, ENG_ID_ERS, 28), SND(S_VOLUME, 30), PAR(0, P_TRANS, -12), SND(S_REV_TYPE, 1), SND(S_REV_MIX, 30)}},
     {"FM GROWL", {ENG(0, ENG_ID_ERS, 29), SND(S_VOLUME, 57), SND(S_DRIVE, 20), SND(S_REV_TYPE, 0), SND(S_REV_MIX, 20)}},
@@ -188,10 +194,11 @@ static const factory_t FACTORY[] = {
                      SND(S_REV_TYPE, 1), SND(S_REV_MIX, 30)}},
     {"SUB FLUTE", {ENG(0, ENG_ID_ERS, 19), SND(S_VOLUME, 75), PAR(0, P_TONE, TN_SUB), PAR(0, P_TONE_A, 55), PAR(0, P_TONE_B, 30),
                    PAR(0, P_TONE_C, 0), SND(S_REV_TYPE, 1), SND(S_REV_MIX, 34)}},
-    {"TALK FOLD", {ENG(0, ENG_ID_FOLD, 1), SND(S_VOLUME, 127), PAR(0, P_TONE, TN_TALK), PAR(0, P_TONE_A, 30), PAR(0, P_TONE_B, -50),
-                   PAR(0, P_TONE_C, 85), SND(S_REV_TYPE, 0), SND(S_REV_MIX, 26), SND(S_DLY_MIX, 16)}},
-    /* the oboe with a singer on it */
-    {"VOX OBOE", {ENG(0, ENG_ID_ERS, 16), SND(S_VOLUME, 32), ENG(1, ENG_ID_VOWEL, 0), PAR(1, P_LEVEL, 45), SND(S_REV_TYPE, 1), SND(S_REV_MIX, 40),
+    /* (TALK FOLD until 2026-10-28, FOLD's REEDY: now FM's REED through the same mouth) */
+    {"TALK FM REED", {ENG(0, ENG_ID_FM, 1), SND(S_VOLUME, 127), PAR(0, P_TONE, TN_TALK), PAR(0, P_TONE_A, 30), PAR(0, P_TONE_B, -50),
+                      PAR(0, P_TONE_C, 85), SND(S_REV_TYPE, 0), SND(S_REV_MIX, 26), SND(S_DLY_MIX, 16)}},
+    /* the oboe with a singer on it (VOWEL until 2026-10-28, now EVA VOX) */
+    {"VOX OBOE", {ENG(0, ENG_ID_ERS, 16), SND(S_VOLUME, 35), ENG(1, ENG_ID_EVA, 5), PAR(1, P_LEVEL, 45), SND(S_REV_TYPE, 1), SND(S_REV_MIX, 40),
                   SND(S_REV_PRE, 35)}},
     /* a talking lead in two voices: the note and a sixth under, each with its own mouth */
     {"TALK DUO", {ENG(0, ENG_ID_ANALOG, 0), SND(S_VOLUME, 29), PAR(0, P_TONE, TN_TALK), PAR(0, P_TONE_A, 10), PAR(0, P_TONE_B, 55),

@@ -367,6 +367,10 @@ static void layers_defaults(void)                  /* the layers of a new preset
         if (n)
             layer_set_engine(n, NENGINES);         /* OFF, at full level: an engine picked there plays at once */
     }
+    /* the sine: ENGINES[0] is FM (engines.h); no index, no air, breath not on the index (SINE's, until 2026-10-28) */
+    trk[0].p[P_E0 + 0] = 0;                        /* INDEX */
+    trk[0].p[P_E0 + 4] = 0;                        /* AIR */
+    trk[0].p[P_BR_SHP] = 0;
     s_own = 0;
 }
 

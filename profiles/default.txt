@@ -1,10 +1,7 @@
 # typhoon's default build: the engines it includes, one per line (engines/engines.h knows the names).
 # A profile is a choice of engines for a build: ./build.sh --profile NAME, or --engines a,b,c.
-sine
-analog
-noise
+# FM is in every build (the INIT sound, what a missing engine plays). SINE, NOISE, FOLD, VOWEL: removed 2026-10-28.
 fm
-fold
-vowel
+analog
 ers
 eva

@@ -38,7 +38,7 @@ export default function (t) {
   const en = req(TSX.CMD.ENGINES, [0]).data;
   const names = [];
   for (let k = 0; k < Math.min(6, en[0]); k++) names.push(`${en[1 + k * 9]}:${TSX.nameOf(en.slice(2 + k * 9, 10 + k * 9))}`);
-  check(en[0] === ex.sim_nengines() && names[0] === `${C.ENG_ID_SINE}:SINE`, `editor ENGINES: ${en[0]} (${names.join(' ')} ...)`);
+  check(en[0] === ex.sim_nengines() && names[0] === `${C.ENG_ID_FM}:FM`, `editor ENGINES: ${en[0]} (${names.join(' ')} ...)`);
   if (t.engine(C.ENG_ID_ERS) >= 0) {
     ex.sim_preset(255);
     set([LN(1, C.P_ENGINE), C.ENG_ID_ERS]);

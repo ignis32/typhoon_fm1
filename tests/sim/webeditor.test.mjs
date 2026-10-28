@@ -66,7 +66,7 @@ export default async function (t) {
   check(all.every((h) => ed.d(h) && ed.val.get(h) === dev(h)), 'webeditor connect: every parameter described, every value the device\'s');
   const rt = ed.d(SP(C.S_REV_TYPE)), lv = ed.d(LN(0, C.P_LEVEL)), eng = ed.d(LN(0, C.P_ENGINE));
   check([...rt.enum.values()].join() === 'PLATE,HALL' && rt.group === C.GR_REVERB && lv.label === 'LEVEL' &&
-    eng.enum.get(C.ENG_ID_OFF) === 'OFF' && eng.enum.get(C.ENG_ID_SINE) === 'SINE' && ed.d(SG(C.S_REV_TYPE)) === rt,
+    eng.enum.get(C.ENG_ID_OFF) === 'OFF' && eng.enum.get(C.ENG_ID_FM) === 'FM' && ed.d(SG(C.S_REV_TYPE)) === rt,
     'webeditor DESCRIBE: REVERB TYPE\'s names by TEXT, the engines by ENGINES (and OFF), a global copy as its preset\'s');
   check(ed.list.every((s, k) => s.name === t.name(k) && s.user === !!ex.sim_preset_user(k)), 'webeditor LIST: the 96 slots, names and user flags');
 
@@ -108,9 +108,9 @@ export default async function (t) {
       if (ed.knobHandles(1).map((h) => ed.d(h).label).join() !== before) moved = true;
     }
     check(knobsOk(1), `webeditor ERS: after each EXCITER the labels are the device's${moved ? ' (they changed)' : ' (they stayed)'}: ${ed.knobHandles(1).map((h) => ed.d(h).label).join(' ')}`);
-    ed.set(LN(1, C.P_ENGINE), C.ENG_ID_SINE);
+    ed.set(LN(1, C.P_ENGINE), C.ENG_ID_FM);
     await ed.flush();
-    check(ed.d(LN(1, C.P_E0)).label === devDesc(LN(1, C.P_E0)).label && knobsOk(1), `webeditor engine -> SINE: knob 1 ${ed.d(LN(1, C.P_E0)).label}`);
+    check(ed.d(LN(1, C.P_E0)).label === devDesc(LN(1, C.P_E0)).label && knobsOk(1), `webeditor engine -> FM: knob 1 ${ed.d(LN(1, C.P_E0)).label}`);
     // TONE (core/tone.c): its three knobs follow its type, labels and values (a new type sets its defaults)
     const tk = ed.toneKnobs(1), toneOk = () => tk.every((h) => ed.d(h).label === devDesc(h).label && ed.val.get(h) === dev(h));
     const seen = [];

@@ -4,7 +4,7 @@
 // dies to 0, stereo; DECAY's RT60 as the formula has it (0.2 s x 2^(6 DECAY / 127): half HALL's, as the old PLATE); MIX 0 leaves the dry
 // bit for bit; its wet level near HALL's; full scale does not overflow; a SIZE sweep does not click; the largest SIZE
 // and PRE-DLY fit the memory. Each take on a fresh firmware (the same take twice is the same sound: the wet is one take
-// minus the same take at MIX 0). The input: INIT with NOISE on its layer (a burst, broadband) or its sine.
+// minus the same take at MIX 0). The input: INIT with EVA's NS_WHITE on its layer (a burst, broadband) or its sine.
 import { boot } from './lib.mjs';
 
 export default function (t) {
@@ -13,7 +13,12 @@ export default function (t) {
   const fresh = (type, s, noise = true) => {        // a firmware: INIT, the reverb so (s: SIZE/DECAY/DAMP/PRE/MIX)
     const f = boot(undefined, true), { ex } = f;
     ex.sim_preset(255);
-    if (noise) f.engine(C.ENG_ID_NOISE);
+    if (noise) {                                    // (the NOISE engine until 2026-10-28: now EVA's NS_WHITE, open)
+      ex.sim_par_set(LN(0, C.P_ENGINE), f.engine(C.ENG_ID_EVA));
+      ex.sim_par_set(LN(0, C.P_E0 + 1), 11);        // WAVE NS_WHITE
+      ex.sim_par_set(LN(0, C.P_E0 + 3), 127);       // CUTOFF
+      ex.sim_par_set(LN(0, C.P_E0 + 6), 0);         // VIB
+    }
     for (const g of [SP, SG]) {
       ex.sim_par_set(g(C.S_DLY_MIX), 0);
       ex.sim_par_set(g(C.S_REV_TYPE), type);
@@ -100,7 +105,7 @@ export default function (t) {
     const a = fresh(type, s, noise), d = fresh(type, [s[0], s[1], s[2], s[3], 0], noise);
     const x = burst(a, ms, breath), y = burst(d, ms, breath);
     take(a, 1300, x.L, x.R); take(d, 1300, y.L, y.R);
-    return { L: x.L.map((v, i) => v - y.L[i]), R: x.R.map((v, i) => v - y.R[i]),
+    return { L: x.L.map((v, i) => v - y.L[i]), R: x.R.map((v, i) => v - y.R[i]), dry: y.L,
       peak: x.L.concat(x.R).reduce((m, v) => Math.max(m, Math.abs(v)), 0) };
   };
   {
@@ -112,14 +117,15 @@ export default function (t) {
       `PLATE's wet level near HALL's: ${lp.toFixed(1)} dB against ${lh.toFixed(1)} dB (noise, MIX 64)`);
   }
 
-  // full scale: the loudest input (NOISE at full breath, the largest SIZE and DECAY, MIX 127) does not overflow:
-  // the wet twice as loud as from half the input at most (a wrap would be far louder) and the output bounded
+  // full scale: the loudest input (white noise at full breath, the largest SIZE and DECAY, MIX 127) does not
+  // overflow: the wet grows with the input as the dry does, from half breath (a wrap would be far louder), and the
+  // output is bounded. (Against the dry's own growth: EVA's breath law makes half breath ~8 dB down, not 6.)
   {
     const s = [127, 127, 0, 0, 127], full = wet(C.RT_PLATE, s, 600, 127), half = wet(C.RT_PLATE, s, 600, 64);
-    const r = rms(full.L) / rms(half.L);
-    check(r > 0.5 && r < 2.5 && full.peak < 4 && full.L.every(Number.isFinite),
+    const r = rms(full.L) / rms(half.L), rin = rms(full.dry) / rms(half.dry);
+    check(r > 0.5 && r < rin * 1.3 && full.peak < 4 && full.L.every(Number.isFinite),
       `PLATE at full scale: no overflow (wet ${dB(rms(full.L)).toFixed(1)} dB, from half breath ` +
-      `${dB(rms(half.L)).toFixed(1)} dB, peak ${full.peak.toFixed(2)})`);
+      `${dB(rms(half.L)).toFixed(1)} dB: x${r.toFixed(2)}, the dry x${rin.toFixed(2)}; peak ${full.peak.toFixed(2)})`);
   }
 
   // a SIZE sweep does not click: a sine held, SIZE 0 -> 127 -> 0 in steps of 8 every 30 ms; the wet's largest 2nd

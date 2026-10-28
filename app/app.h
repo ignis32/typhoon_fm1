@@ -25,14 +25,9 @@ int typhoon_ble_at_boot(void);
 #if __has_include("typhoon_engines.h")
 #include "typhoon_engines.h"
 #endif
-#if !(defined TYPHOON_ENG_SINE || defined TYPHOON_ENG_ANALOG || defined TYPHOON_ENG_NOISE || defined TYPHOON_ENG_FM || \
-      defined TYPHOON_ENG_FOLD || defined TYPHOON_ENG_VOWEL || defined TYPHOON_ENG_ERS || defined TYPHOON_ENG_EVA)
-#define TYPHOON_ENG_SINE 1
-#define TYPHOON_ENG_ANALOG 1
-#define TYPHOON_ENG_NOISE 1
+#if !(defined TYPHOON_ENG_FM || defined TYPHOON_ENG_ANALOG || defined TYPHOON_ENG_ERS || defined TYPHOON_ENG_EVA)
 #define TYPHOON_ENG_FM 1
-#define TYPHOON_ENG_FOLD 1
-#define TYPHOON_ENG_VOWEL 1
+#define TYPHOON_ENG_ANALOG 1
 #define TYPHOON_ENG_ERS 1
 #define TYPHOON_ENG_EVA 1
 #endif

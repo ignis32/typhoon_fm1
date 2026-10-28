@@ -12,7 +12,8 @@ export default function (t) {
   const want = [
     { ...layer, P_E0: 0, P_E1: 1, P_E2: 90, P_E3: 2, P_E4: 101, P_E5: 65, P_E6: 0, P_E7: 20 },
     { ...layer, P_LEVEL: 46, P_E0: 9, P_E1: 2, P_E2: 30, P_E3: 0, P_E4: 38, P_E5: 23, P_E6: 0, P_E7: 0 },
-    { ...layer, P_ENGINE: C.ENG_ID_OFF, P_BR_SHP: 30 },
+    { ...layer, P_ENGINE: C.ENG_ID_OFF, P_BR_SHP: 40 },   // (an OFF layer keeps the first engine's BR>SHP: FM's 40
+                                                          // since 2026-10-28, SINE's 30 before; picking one sets its own)
   ];
   const snd = { S_DRIVE: 6, S_DRV_AT: 62, S_REV_SIZE: 90, S_REV_DECAY: 70, S_REV_DAMP: 50, S_REV_MIX: 30,
     S_DT_CENTS: 9, S_DT_DELAY: 10, S_DT_WIDTH: 127, S_DT_MIX: 12 };

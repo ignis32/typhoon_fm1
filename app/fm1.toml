@@ -17,4 +17,4 @@ include = ["../firmware/src", "../firmware/gen", "../build/engines"]   # typhoon
 tagline = "the voice of the Artinoise re.corder"
 repo = "https://github.com/ignis32/typhoon_fm1"
 licence = "MPL-2.0"
-credits = "Built on fm1-base (Charles Vestal) and felucca-bsp, from Felucca by Leo Kuroshita (Hügelton Instruments); engines ANALOG and NOISE from Felucca-Engines."
+credits = "Built on fm1-base (Charles Vestal) and felucca-bsp, from Felucca by Leo Kuroshita (Hügelton Instruments); the engine ANALOG from Felucca-Engines."

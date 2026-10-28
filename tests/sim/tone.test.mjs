@@ -52,8 +52,8 @@ export default function (t) {
   check(rms(soft) > 0.01 && rms(hard) > 0.01 && bright(hard) > bright(soft) * 1.2 && ok4,   // (U .. I: brighter as breath opens the vowel)
     `TONE TALK: the vowel follows breath (${bright(soft).toFixed(2)} -> ${bright(hard).toFixed(2)})`);
 
-  // SUB OCT: a sine layer gains the octave below (A3 220 Hz: the period found is twice as long)
-  ex.sim_preset(255); ex.sim_par_set(SG(C.S_REV_MIX), 0); ex.sim_par_set(L1(C.P_ENGINE), t.engine(C.ENG_ID_SINE));
+  // SUB OCT: a sine layer (INIT's: FM, no index) gains the octave below (A3 220 Hz: the period found is twice as long)
+  ex.sim_preset(255); ex.sim_par_set(SG(C.S_REV_MIX), 0);
   ex.sim_par_set(L1(C.P_TONE), C.TN_SUB); ex.sim_par_set(L1(C.P_TONE_A), 127); ex.sim_par_set(L1(C.P_TONE_B), 0);
   ex.sim_midi(0xB0, 2, 100); ex.sim_midi(0x90, 69, 80); run(400);
   const f = t.pitch(300, 150, 600), ok5 = (t.off(69, 1500), run(200) < 1e-3);

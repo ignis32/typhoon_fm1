@@ -204,8 +204,12 @@ static const char *const EVA_N_FILT[EVA_NFILT] = {"LP2", "LP4", "BP", "HP"};
 static void eva_note_on(track_t *t, voice_t *v)   /* an articulated note: the sweep kicks, the humanise draws */
 {
     eva_t *s = &eva_st[(uint32_t)(t - trk) % NLAYER];
-    if (!s->seed)
-        s->seed = 0x2545F491u + (uint32_t)v->age;
+    (void)v;
+    if (s->gain == 0.f) {                          /* from silence: the noises and the humanise start the same each */
+        s->noise = 0x9E3779B9u;                    /* time (a puff, a test's take: as NOISE's were, seeded by the */
+        s->seed = 0x2545F491u;                     /* note); the notes after it vary */
+        s->nz[0] = s->nz[1] = s->nz[2] = s->nz[3] = 0.f;
+    }
     s->sweep = 1.f;
     s->chiff = 1.f;
     s->hp = 3.f * EVA_HUMAN * eva_urand(&s->seed);          /* cents */
@@ -213,15 +217,15 @@ static void eva_note_on(track_t *t, voice_t *v)   /* an articulated note: the sw
     s->hg = 1.f + 0.06f * EVA_HUMAN * eva_urand(&s->seed);  /* (+-0.5 dB x HUMAN) */
 }
 
-/* every block, sounding or not: a layer whose voice has faded out is at rest (its followers would stay where the
- * last note left them: the next note would start from there, with no breath) */
+/* every block, sounding or not: a layer whose voice has faded out is at rest, all of it cleared (the followers, the
+ * filters' and the formant's states, the phases, the noises): a note from silence starts the same each time, not
+ * from what the last note's filter was still ringing down to. (Zero is each part's start: eva_note_on seeds the
+ * noises and the humanise, the render takes its coefficients and SUPERSAW's phases afresh) */
 static void eva_block(track_t *t)
 {
     eva_t *s = &eva_st[(uint32_t)(t - trk) % NLAYER];
-    if (!t->v[0].active) {
-        s->y = s->za = s->zf = s->zv = s->zw = s->gain = s->sweep = s->chiff = 0.f;
-        s->tz[0] = s->tz[1] = 0.f;                 /* (TUNED rings from silence on the next note's pitch) */
-    }
+    if (!t->v[0].active)
+        memset(s, 0, sizeof *s);
 }
 
 static void eva_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const vmod_t *m)
