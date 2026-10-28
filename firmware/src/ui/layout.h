@@ -10,14 +10,15 @@
  *   title        0 = the engine's own page title (engine page 1 or 2)
  *   kind         UK_KNOBS four rows of label / value / bar; UK_CURVE the breath curve, drawn, with the live
  *                breath on it; UK_FOLLOW the layer's volume envelope, drawn (delay, attack, decay, sustain,
- *                release); UK_BT Bluetooth's state and log; the graph pages have their four knobs in a row below
+ *                release); UK_BT Bluetooth's state and log; UK_PERF the load and the xruns (ui/page_perf.c); the
+ *                graph pages have their four knobs in a row below
  *   next         the page the same button goes to again (its cycle: EDIT 1 -> 2 (-> 3 -> 4) -> TONE, FX DRIVE -> DETUNE -> DELAY -> REVERB -> REVERB +);
  *                PG_STAY: none
  *   PR_NONE      an empty knob
  * Where a page is, the header says (ui.c): the preset (number, name, * when edited) and the layer on layer pages;
  * on SP pages whether the preset uses the GLOBAL group or its OWN; SG pages are the global ones (an amber bar). */
 
-enum { UK_KNOBS, UK_CURVE, UK_FOLLOW, UK_BT };
+enum { UK_KNOBS, UK_CURVE, UK_FOLLOW, UK_BT, UK_PERF };
 typedef struct {
     const char *title;
     uint8_t kind, eng_page, next;
@@ -29,7 +30,7 @@ enum {
     PG_MIX,
     PG_GLOBAL, PG_BT, PG_TILT, PG_G_CURVE, PG_G_LP, PG_G_DRIVE, PG_G_DETUNE, PG_G_DELAY, PG_G_REVERB,
     PG_REVERB2, PG_G_REVERB2, PG_G_BREATH, PG_TONE, PG_ENG3, PG_ENG4, PG_LEAP,
-    PG_USB, PG_USBH, PG_ENG5, PG_QUIRKS,          /* (new pages at the end: the others keep their numbers) */
+    PG_USB, PG_USBH, PG_ENG5, PG_QUIRKS, PG_PERF,   /* (new pages at the end: the others keep their numbers) */
     NPAGES
 };
 #define PG_STAY 0xFFu
@@ -68,7 +69,9 @@ static const ui_page_t PAGES[NPAGES] = {
     [PG_LEAP] = {"LEAPS", UK_KNOBS, 0, PG_USB, {G(G_LEAP_MODE), G(G_LEAP_ST), G(G_LEAP_MS), PR_NONE}},   /* (core/leap.c) */
     [PG_USB] = {"USB AUDIO", UK_KNOBS, 0, PG_USBH, {G(G_USB_IN), G(G_USB_IN_LV), G(G_USB_OUT), G(G_USB_OUT_LV)}},
                                                   /* (app/usbaudio.c) */
-    [PG_USBH] = {"USB HOST", UK_KNOBS, 0, PG_GLOBAL, {G(G_USB_HOST), PR_NONE, PR_NONE, PR_NONE}},   /* (app/usbhost.c) */
+    [PG_USBH] = {"USB HOST", UK_KNOBS, 0, PG_PERF, {G(G_USB_HOST), PR_NONE, PR_NONE, PR_NONE}},   /* (app/usbhost.c) */
+    [PG_PERF] = {"PERFORMANCE", UK_PERF, 0, PG_GLOBAL, {PR_NONE, PR_NONE, PR_NONE, PR_NONE}},   /* (the load, the
+                                                  * xruns: core/cpumeter.c, ui/page_perf.c; KNOB 1 resets) */
     /* the global effects (what a preset without its own group plays): REC, apart from GLO's settings (2026-10-24) */
     /* (PG_G_LP, the global BREATH LP until 2026-10-28: no page now, its number kept) */
     [PG_G_DRIVE] = {"DRIVE", UK_KNOBS, 0, PG_G_DETUNE, {SG(S_DRIVE), SG(S_DRV_AT), PR_NONE, PR_NONE}},

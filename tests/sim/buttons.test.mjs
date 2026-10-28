@@ -8,8 +8,8 @@ export default function (t) {
   const cycle = (b, n) => { const s = []; for (let i = 0; i < n; i++) { press(b); s.push(ex.sim_page_cur()); } return s; };
   const name = (pg) => Object.keys(C).find((k) => k.startsWith('PG_') && C[k] === pg) || pg;
 
-  const glo = cycle(C.BTN_GLO, 9);
-  const wantGlo = [C.PG_GLOBAL, C.PG_BT, C.PG_TILT, C.PG_G_BREATH, C.PG_G_CURVE, C.PG_LEAP, C.PG_USB, C.PG_USBH, C.PG_GLOBAL];
+  const glo = cycle(C.BTN_GLO, 10);
+  const wantGlo = [C.PG_GLOBAL, C.PG_BT, C.PG_TILT, C.PG_G_BREATH, C.PG_G_CURVE, C.PG_LEAP, C.PG_USB, C.PG_USBH, C.PG_PERF, C.PG_GLOBAL];
   check(glo.join() === wantGlo.join(), `GLO: the global settings and the breath curve, round (${glo.map(name).join(' ')})`);
 
   const rec = cycle(C.BTN_REC, 6);                // (BREATH LP first until 2026-10-28: now ERS's and FM's EDIT 5)

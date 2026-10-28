@@ -352,6 +352,11 @@ static void ui_input(void)
             ui.hdr++;
             continue;
         }
+        if (st && ui.page == PG_PERF && k == 0u) {   /* KNOB 1: the worst and the xruns start again */
+            cpum_reset();
+            ui_msg("RESET");
+            continue;
+        }
         if (st && knob_live(r)) {
             par_step(r, st);
             ui.touched_k = k;
@@ -749,6 +754,7 @@ static void draw_curve_knobs(void)                 /* (the knob row under a grap
 }
 
 #include "page_bt.c"                                 /* (the BLUETOOTH page) */
+#include "page_perf.c"                               /* (the PERFORMANCE page) */
 
 #if defined(TYPHOON_SIM)
 #endif
@@ -813,6 +819,8 @@ static void ui_draw(void)
             draw_curve_knobs();
         } else if (pg->kind == UK_BT)
             draw_bt();
+        else if (pg->kind == UK_PERF)
+            draw_perf();
         else
             for (k = 0; k < 4u; k++)
                 draw_knob_row(k);
@@ -822,6 +830,8 @@ static void ui_draw(void)
         draw_status();
         if (pg->kind == UK_BT && fm1_ms % 400u < 40u)   /* (the log, a few times a second) */
             draw_bt();
+        if (pg->kind == UK_PERF && fm1_ms % 200u < 40u)   /* (~5 times a second) */
+            draw_perf();
         if (pg->kind == UK_CURVE && perf_ui.breath != ui.drawn_breath) {
             ui.drawn_breath = perf_ui.breath;
             draw_curve();

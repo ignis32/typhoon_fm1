@@ -27,7 +27,9 @@
  *   6  DELETE          slot                           - (the slot plays its factory preset, or INIT, again)
  *   7  RENAME          slot, name (12 B, ASCII)       - (TS_EMPTY: nothing saved there)
  *   8  STATS           -                              the audio ISR's load, % x 10 (2 B): the average, the highest
- *                                                     since the last STATS (it starts again)
+ *                                                     since the last STATS (it starts again); the xruns since
+ *                                                     boot (2 B); the worst single block since the last STATS, %
+ *                                                     x 10 (2 B; core/cpumeter.c)
  * The editor (a computer edits what plays, as the knobs do; web/presets/tsx.mjs). A parameter is its handle
  * (core/params.c pref_t, 2 B: layer n's i = n << 8 | i, the sound's i as the preset plays it 0x4000 | i, its global
  * copy 0xC000 | i, a global 0x8000 | i); a value 2 B, signed. A layer's engine (P_ENGINE) is its stable id
@@ -244,11 +246,14 @@ static int tsx_command(uint32_t cmd, const uint8_t *d, uint32_t n, uint8_t *o, u
         tsx_note("USB > ", d[0]);
         return TS_OK;
     case TSX_STATS: {
-        uint32_t a = audio_load, p = audio_peak;
+        uint32_t a = audio_load, p = audio_peak, x = plat_xruns(), w = cpum.stat;
         if (n) return TS_BAD;
         audio_peak = 0;
+        cpum.stat = 0;
+        if (x > 0xFFFFu) x = 0xFFFFu;
         o[0] = (uint8_t)a; o[1] = (uint8_t)(a >> 8); o[2] = (uint8_t)p; o[3] = (uint8_t)(p >> 8);
-        *on = 4;
+        o[4] = (uint8_t)x; o[5] = (uint8_t)(x >> 8); o[6] = (uint8_t)w; o[7] = (uint8_t)(w >> 8);
+        *on = 8;
         return TS_OK;
     }
     case TSX_LAYOUT:

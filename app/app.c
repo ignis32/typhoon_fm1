@@ -169,6 +169,7 @@ static void midi_send(uint32_t st, uint32_t d1, uint32_t d2)
 #include "ble.c"                                   /* app/ble.c: Bluetooth (BLE-P, BLE-C) for the UI, on plat_ble_* */
 #include "usbaudio.c"                              /* app/usbaudio.c: GLOBAL > USB AUDIO, on plat_usb_audio_set */
 #include "usbhost.c"                               /* app/usbhost.c: GLOBAL > USB HOST, on plat_usb_host */
+#include "core/cpumeter.c"                         /* (the render's load, the xruns: GLO > PERFORMANCE, STATS) */
 #include "ui/layout.h"
 #include "ui/ui.c"
 #include "core/sysex.c"
@@ -255,7 +256,7 @@ int typhoon_ble_at_boot(void) { return gpar[G_BLE_P] != 0 || gpar[G_BLE_C] != 0;
  * (the same curve: APP_GAIN, m * m >> 12), the device's clip, and 24 bits */
 void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
 {
-    uint32_t i;
+    uint32_t i, t0 = plat_ticks24();
     for (i = 0; i < 2u * n; i++)                   /* (layers_audio adds: Dinghy cleared the block before) */
         lr[i] = 0;
     layers_audio(lr, n);
@@ -263,6 +264,7 @@ void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
         int32_t v = (lr[i] * (int32_t)master_q12) >> 12;
         lr[i] = clamp(v, -32767, 32767) << 8;
     }
+    cpum_block((plat_ticks24() - t0) / PLAT_TICKS_PER_US, n);   /* (core/cpumeter.c) */
 }
 
 void app_panic(void) { perf_all_off(); }
@@ -329,6 +331,7 @@ void app_frame(void)
     ui_leds();
     tp_lights();
     ui_draw();
+    cpum_poll();                                   /* (the xruns, the worst block a second: core/cpumeter.c) */
     audio_load = plat_cpu_pct() * 10u;             /* (core/sysex.c STATS: the render's load, % x 10) */
     if (audio_load > audio_peak)
         audio_peak = audio_load;

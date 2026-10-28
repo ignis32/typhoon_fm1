@@ -10,7 +10,8 @@
                                                 the presets in FILE back into their slots (or only N, or N into M)
   tools/presets.py rename N NAME                slot N's name (up to 12: A-Z 0-9 space - . /)
   tools/presets.py delete N                     slot N plays its factory preset (or INIT) again
-  tools/presets.py stats [SECONDS]              the audio's CPU load once a second (average, highest), for SECONDS
+  tools/presets.py stats [SECONDS]              the audio's CPU load once a second (average, highest; the worst
+                                                single block and the xruns since boot), for SECONDS
                                                 (default 10): play meanwhile to see what a sound costs
 
 Slots are numbered as on the screen, 1..96 (the device says how many). Writes just write (no question on the
@@ -295,7 +296,10 @@ def main():
             time.sleep(1)
             d = dev.ok(CMD["STATS"], what="STATS")
             avg, peak = d[0] | d[1] << 8, d[2] | d[3] << 8
-            print(f"  audio load {avg / 10:5.1f} %   highest {peak / 10:5.1f} %", flush=True)
+            more = ""
+            if len(d) >= 8:                            # (xruns and the worst block: typhoon 0.3.24 on)
+                more = f"   worst block {(d[6] | d[7] << 8) / 10:5.1f} %   xruns {d[4] | d[5] << 8}"
+            print(f"  audio load {avg / 10:5.1f} %   highest {peak / 10:5.1f} %{more}", flush=True)
     elif a.cmd == "delete":
         k = slot_arg(a.slot, inf["slots"])
         dev.ok(CMD["DELETE"], [k - 1], "DELETE")

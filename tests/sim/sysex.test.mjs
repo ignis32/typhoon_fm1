@@ -64,7 +64,9 @@ export default function (t) {
   const del = req(TSX.CMD.DELETE, [61]).status;
   check(del === 'OK' && ex.sim_preset_user(61) === 0 && listName(61) === factory62, `sysex DELETE slot 62: its factory preset again, ${factory62} (${del})`);
   const stats = req(TSX.CMD.STATS);
-  check(stats.status === 'OK' && stats.data.length === 4, 'sysex STATS answers (the load: 0 on the sim)');
+  const xr = stats.data[4] | stats.data[5] << 8;
+  check(stats.status === 'OK' && stats.data.length === 8 && xr === 0,
+    `sysex STATS answers: the load, the xruns (${xr}: none on the sim), the worst block (${(stats.data[6] | stats.data[7] << 8) / 10} %)`);
   const f = TSX.frame(TSX.CMD.INFO, next()); f[f.length - 2] ^= 1;
   check(send(f) === null, 'sysex: a bad sum gets no reply');
 }

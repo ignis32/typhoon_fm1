@@ -55,6 +55,11 @@ adapter. While it is ON, no computer can use that port: no USB audio, and no edi
 OFF to get them back, or hold REC at power-on to enter update mode. The setting is saved; the FM-1 starts as a USB
 device and switches to host on its first frame. OFF by default. Untested on an FM-1 yet.
 
+**Performance** (GLO → PERFORMANCE): is the sound keeping up. CPU AVERAGE is the audio's load over about 90 ms;
+WORST BLOCK, 1 S the slowest single block in the last second, and WORST BLOCK the slowest since the reset, each as %
+of the block's time (red from 90 %). XRUNS counts the blocks not done in time since the reset, each a dropout heard as
+a click, and LAST XRUN says when the last one came. Turn KNOB 1 to reset. Over USB: `tools/presets.py stats`.
+
 **The sound.** A preset is the whole sound: three layers (engine and its knobs, level, transpose, pan, envelope, how
 breath moves them) and a name. The sound after the layers (breath curve, breath LP, drive, detune, delay, reverb,
 volume) is in groups: each has a **global** copy (the curve on GLO beside BREATH IN, the effects on REC; an amber
@@ -75,7 +80,7 @@ the page's button gives it back to the global one.
 | LFO | ENVELOPE (per layer, drawn): ATTACK, DECAY, SUSTAIN, RELEASE → ENVELOPE + (DELAY, BR>AMP). Restarts on a fresh attack, legato runs on |
 | ARP | LAYER (engine, level, transpose, pan) → LAYER + (breath → tone / shape, filter type, fine) |
 | SEQ | MIX: the 3 levels, each with its engine, and the preset's VOLUME (KNOB 4: the whole sound, effects too; 100 = as it is) · hold: VOLUME back to global |
-| GLO | the global settings: GLOBAL (breath source, bend, transpose) → BLUETOOTH (BLE-P, BLE-C, the list, AUTO_RECONNECT) → TILT>BEND → BREATH IN (BREATH CC, LOUDNESS) → CURVE (the global breath curve) → LEAPS → USB AUDIO → USB HOST · hold: GLOBAL TO FACTORY ? |
+| GLO | the global settings: GLOBAL (breath source, bend, transpose) → BLUETOOTH (BLE-P, BLE-C, the list, AUTO_RECONNECT) → TILT>BEND → BREATH IN (BREATH CC, LOUDNESS) → CURVE (the global breath curve) → LEAPS → USB AUDIO → USB HOST → PERFORMANCE (load, xruns) · hold: GLOBAL TO FACTORY ? |
 | REC | the global effects: DRIVE → DETUNE → DELAY → REVERB → REVERB + (what a preset without its own group plays) · hold: all notes off |
 | OCT− / OCT+ | press: transpose a semitone (when let go) · hold: an octave (or SEL + press) · both: 0. Cuts the sounding note |
 | PLAY | mute the layer · hold: solo it (again: back; PLAY blinks meanwhile) |
