@@ -22,7 +22,9 @@ The version is in `VERSION` (every build carries it: the header at power-on, Sys
 - **Since 0.3:** the engines FM, ANALOG, ERS and EVA (SINE, NOISE, FOLD and VOWEL removed: FM at INDEX 0 is the
   sine, EVA has the noises, NS_*); 20 knobs an engine (EDIT 5), older presets read as they were. The mix's
   BREATH LP is ERS's and FM's own (EDIT 5). Every delay on breath is a knob, 0 (none) on a new layer: EVA LAG and
-  VIB SWELL, ERS LAG and VIB SWELL; the factory presets have them as they played before.
+  VIB SWELL, ERS LAG and VIB SWELL; the factory presets have them as they played before. QUIRKS (ARP's third page):
+  each fingered note a little off in pitch and level, the same way every time, as a real instrument's tone holes;
+  QUIRK SET picks another instrument's (EVA's hidden random humanise is gone).
 - **0.2** (2026-10-17, as tornado, on its earlier GPL platform; not in this repository) — the first usable one. BLE central, tilt → pitch
   bend, three layers per preset with seven engines, the effects (then also an OLD reverb), 64 slots, SAVE / SAVE AS,
   backup and restore over USB-MIDI (`tools/presets.py`); no editor page yet.

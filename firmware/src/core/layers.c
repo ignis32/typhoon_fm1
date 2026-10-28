@@ -187,6 +187,34 @@ static void layer_pitch(track_t *t, voice_t *v)
     v->pitch16 = v->pitch_cur = clamp(((int32_t)pf.note + pf.xpose + t->p[P_TRANS]) * 16, 0, 2047);
 }
 
+/* ---- QUIRKS (P_QUIRKS, P_QSET: knobs): each fingered note a little off in pitch and level, the same way every
+ * time, slurred or tongued, as an instrument's own tone holes are; another QUIRK SET, another instrument's. Keyed on
+ * the note as it comes in (the fingering: before the transpose and TRANS), from a hash: no state, no randomness in
+ * time. The fixed numbers: */
+#define QUIRK_CENTS 12                             /* QUIRKS 100 %: a note up to +-12 cents off (a real instrument's
+                                                    * worst notes, uncorrected, are ~10 .. 15 cents out) */
+#define QUIRK_GAIN_Q15 6170                        /* and up to +-1.5 dB (10^(1.5 / 20) - 1 = 0.188, Q15): a stuffy
+                                                    * note, a free one */
+static uint32_t quirk_hash(uint32_t note, uint32_t set)   /* (murmur3's finaliser: every input bit moves the output) */
+{
+    uint32_t h = (note & 127u) | (set & 127u) << 8 | 0x5A000000u;
+    h ^= h >> 16;
+    h *= 0x85EBCA6Bu;
+    h ^= h >> 13;
+    h *= 0xC2B2AE35u;
+    h ^= h >> 16;
+    return h;
+}
+/* this note's quirk for a layer's knobs: its pitch, in m.fine's units (1/4096 of the increment), and its gain, Q15 */
+static void layer_quirk(const int16_t *p, int32_t *fine, int32_t *gain)
+{
+    uint32_t h = quirk_hash(pf.note, (uint32_t)p[P_QSET]);
+    int32_t q = p[P_QUIRKS], u1 = (int32_t)(h & 0xFFFFu) - 32768, u2 = (int32_t)(h >> 16) - 32768;   /* -1 .. 1, Q15 */
+    int32_t c16 = u1 * QUIRK_CENTS * q / (2048 * 100);   /* 1/16 cents */
+    *fine = c16 * 2367 / 16000;                    /* (cents -> 1/4096 of the increment: x 2.367) */
+    *gain = 32768 + (u2 * QUIRK_GAIN_Q15 / 32768) * q / 100;
+}
+
 static uint32_t vage;
 static void layer_start(uint32_t l)                /* a new note (not legato) */
 {
@@ -306,7 +334,7 @@ static void layers_block(int32_t *outl, int32_t *outr)
         const int16_t *p = t->p;
         const engine_t *e;
         vmod_t m;
-        int32_t target, a0, lev = p[P_LEVEL], pan = p[P_PAN];
+        int32_t target, a0, lev = p[P_LEVEL], pan = p[P_PAN], qfine = 0, qgain = 32768;
         uint32_t base;
         if (p[P_ENGINE] == ENG_ID_OFF) {           /* no engine: silent, nothing rendered */
             if (lay[l].id != ENG_ID_OFF) {
@@ -363,8 +391,11 @@ static void layers_block(int32_t *outl, int32_t *outr)
         layer_pitch(t, v);                         /* (TRANS may have moved) */
         base = pitch_inc((uint32_t)clamp(v->pitch16 + pf.bend16, 0, 2047));
         memset(&m, 0, sizeof m);
+        if (p[P_QUIRKS])
+            layer_quirk(p, &qfine, &qgain);        /* (this fingering's own pitch and level) */
         m.pitch16 = v->pitch16 + pf.bend16;
-        m.fine = p[P_FINE] * 2367 / 1000 + pf.bend_fine;   /* cents -> 1/4096 of the increment; the bend's rest */
+        m.fine = p[P_FINE] * 2367 / 1000 + pf.bend_fine + qfine;   /* cents -> 1/4096 of the increment; the bend's
+                                                    * rest; the quirk */
         m.inc = base + (uint32_t)((int32_t)(base >> 12) * m.fine);
         m.amp0 = a0;
         m.amp1 = lay[l].amp;
@@ -381,6 +412,10 @@ static void layers_block(int32_t *outl, int32_t *outr)
         tone_block(l, buf, CTL, p, &m, pf.breath);   /* the TONE stage (core/tone.c) */
         {                                          /* level and pan (centre: both sides at the level) */
             int32_t gl = (64 - pan) * lev, gr = (64 + pan) * lev;     /* / (64 * 127) */
+            if (qgain != 32768) {                  /* (the quirk's level) */
+                gl = (gl * qgain) >> 15;
+                gr = (gr * qgain) >> 15;
+            }
             for (i = 0; i < CTL; i++) {
                 outl[i] += (buf[i] * (gl >> 4)) >> 9;
                 outr[i] += (buf[i] * (gr >> 4)) >> 9;

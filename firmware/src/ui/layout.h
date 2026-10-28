@@ -29,7 +29,7 @@ enum {
     PG_MIX,
     PG_GLOBAL, PG_BT, PG_TILT, PG_G_CURVE, PG_G_LP, PG_G_DRIVE, PG_G_DETUNE, PG_G_DELAY, PG_G_REVERB,
     PG_REVERB2, PG_G_REVERB2, PG_G_BREATH, PG_TONE, PG_ENG3, PG_ENG4, PG_LEAP,
-    PG_USB, PG_USBH, PG_ENG5,                     /* (new pages at the end: the others keep their numbers) */
+    PG_USB, PG_USBH, PG_ENG5, PG_QUIRKS,          /* (new pages at the end: the others keep their numbers) */
     NPAGES
 };
 #define PG_STAY 0xFFu
@@ -52,7 +52,9 @@ static const ui_page_t PAGES[NPAGES] = {
     [PG_ENV] = {"ENVELOPE", UK_FOLLOW, 0, PG_ENV2, {L(P_ATK), L(P_DEC), L(P_SUS), L(P_REL)}},
     [PG_ENV2] = {"ENVELOPE +", UK_FOLLOW, 0, PG_ENV, {L(P_DELAY), L(P_BR_AMP), PR_NONE, PR_NONE}},
     [PG_LAYER] = {"LAYER", UK_KNOBS, 0, PG_LAYER2, {L(P_ENGINE), L(P_LEVEL), L(P_TRANS), L(P_PAN)}},
-    [PG_LAYER2] = {"LAYER +", UK_KNOBS, 0, PG_LAYER, {L(P_BR_FLT), L(P_BR_SHP), L(P_FTYPE), L(P_FINE)}},   /* ("BREATH"
+    [PG_QUIRKS] = {"QUIRKS", UK_KNOBS, 0, PG_LAYER, {L(P_QUIRKS), L(P_QSET), PR_NONE, PR_NONE}},   /* (each fingering
+                                                  * its own pitch and level: core/layers.c layer_quirk) */
+    [PG_LAYER2] = {"LAYER +", UK_KNOBS, 0, PG_QUIRKS, {L(P_BR_FLT), L(P_BR_SHP), L(P_FTYPE), L(P_FINE)}},   /* ("BREATH"
                                                   * until 2026-10-28: HOME's page is now) */
     [PG_MIX] = {"MIX", UK_KNOBS, 0, PG_STAY, {LN(0, P_LEVEL), LN(1, P_LEVEL), LN(2, P_LEVEL), SP(S_VOLUME)}},
     [PG_GLOBAL] = {"GLOBAL", UK_KNOBS, 0, PG_BT, {G(G_BSRC), G(G_BEND), G(G_XPOSE), PR_NONE}},   /* (KNOB 4: Bluetooth

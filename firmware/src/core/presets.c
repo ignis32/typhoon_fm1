@@ -34,11 +34,13 @@
 #define PS_HI_AT (17u * 0x1000u)                   /* slots 65 .. 96: sectors 17 .. 20 (after the BT stack's 16) */
 #define PS_HI_COPY ((NPRESET - PS_LO) / PS_PER_SEC * 0x1000u)   /* their copy right after (sectors 21 .. 24) */
 #define PS_MAGIC 0x31505254u                       /* "TRP1" */
-#define PS_VER 3u                                  /* 3: EDIT 5 (P_E16 ..) as saved; 2: NEPAR engine values, EDIT 5
-                                                    * meaning nothing yet; 1: 16 (until 2026-10-28). Below 3, EDIT 5
-                                                    * takes the engine's defaults (ps_edit5_defaults) */
+#define PS_VER 4u                                  /* 4: 48 values a layer (QUIRKS); 3: EDIT 5 (P_E16 ..) as saved; 2:
+                                                    * NEPAR engine values, EDIT 5 meaning nothing yet; 1: 16 (until
+                                                    * 2026-10-28). Below 3, EDIT 5 takes the engine's defaults
+                                                    * (ps_edit5_defaults); below 4, room for 40 a layer (ps_val) */
 #define PS_NL 4u
-#define PS_NP 40u
+#define PS_NP 48u                                  /* (40 until version 4: PS_NP_V3) */
+#define PS_NP_V3 40u
 #define PS_NS 48u
 #define PS_NAME 12u
 typedef struct {
@@ -295,6 +297,19 @@ static int ps_ok(const ps_rec_t *r)
 }
 /* the engine values a record holds, its last ones: 16 in a version 1 record (until 2026-10-28), NEPAR from 2 */
 static uint32_t ps_nepar(const ps_rec_t *r) { return r->ver >= 2u ? NEPAR : 16u; }
+/* a record's values as it was written: layer l's i, and the sound's i. Before version 4 a layer had room for 40
+ * (PS_NP_V3), so its layers and the sound's values lie where that layout put them */
+static int32_t ps_val(const ps_rec_t *r, uint32_t l, uint32_t i)
+{
+    const int16_t *q = (const int16_t *)r->p;
+    return r->ver >= 4u ? r->p[l][i] : q[l * PS_NP_V3 + i];
+}
+static int32_t ps_sval(const ps_rec_t *r, uint32_t i)
+{
+    const int16_t *q = (const int16_t *)r->p;
+    return r->ver >= 4u ? r->s[i] : q[PS_NL * PS_NP_V3 + i];
+}
+static uint32_t ps_np_room(const ps_rec_t *r) { return r->ver >= 4u ? PS_NP : PS_NP_V3; }
 /* slot k's sector in the store (copy 0: the main one, 1: its copy) */
 static uint32_t ps_sec(uint32_t k, uint32_t copy)
 {
@@ -395,14 +410,14 @@ static void ps_apply(const ps_rec_t *r)
     layers_defaults();
     for (l = 0; l < NLAYER && l < r->nl && l < PS_NL; l++) {
         for (i = 0; i < NCOMMON && i < nc; i++)
-            trk[l].p[i] = r->p[l][i];
-        for (i = 0; i < ne && i < NEPAR && nc + i < r->np && nc + i < PS_NP; i++)
-            trk[l].p[P_E0 + i] = r->p[l][nc + i];
+            trk[l].p[i] = (int16_t)ps_val(r, l, i);
+        for (i = 0; i < ne && i < NEPAR && nc + i < r->np && nc + i < ps_np_room(r); i++)
+            trk[l].p[P_E0 + i] = (int16_t)ps_val(r, l, nc + i);
         if (r->ver < 3u)
             ps_edit5_defaults(l);
     }
     for (i = 0; i < S_COUNT; i++)
-        sown[i] = i < r->ns && i < PS_NS ? r->s[i] : sglob[i];
+        sown[i] = i < r->ns && i < PS_NS ? (int16_t)ps_sval(r, i) : sglob[i];
     s_own = (uint8_t)(r->own & ((1u << NGROUP) - 1u));
 }
 
@@ -501,13 +516,16 @@ static int ps_save(uint32_t k)
 /* ---- the state in the settings sector (<= 512 bytes). With room to grow: the counts it was saved with say what is
  * there, and are read by them as the presets are (layers: the commons, then the NEPAR engine values; S_* and G_* by
  * index): a new parameter (just before P_E0, or at the end of S_* / G_*) takes its default, nothing is lost */
-#define STATE_MAGIC 0x7A0Au                        /* change it only when the layout below changes (0x7A0A: EDIT 5 as
-                                                    * saved; 0x7A09: NEPAR engine values, EDIT 5 meaning nothing yet;
-                                                    * 0x7A08, until 2026-10-28, 16: both still read, EDIT 5 then the
-                                                    * engine's defaults) */
+#define STATE_MAGIC 0x7A0Bu                        /* change it only when the layout below changes (0x7A0B: 48 values a
+                                                    * layer; 0x7A0A: 40, EDIT 5 as saved; 0x7A09: NEPAR engine values,
+                                                    * EDIT 5 meaning nothing yet; 0x7A08, until 2026-10-28, 16: all
+                                                    * still read, the older ones in their layout (P_SAVED_V3), EDIT 5
+                                                    * then the engine's defaults below 0x7A0A) */
+#define STATE_MAGIC_40 0x7A0Au
 #define STATE_MAGIC_20 0x7A09u
 #define STATE_MAGIC_16 0x7A08u
-#define P_SAVED 40u
+#define P_SAVED 48u
+#define P_SAVED_V3 40u                             /* (the layers' room in the states before 0x7A0B) */
 #define S_SAVED 32u
 typedef struct {
     uint16_t magic;
@@ -521,18 +539,28 @@ typedef struct {
 } state_t;
 _Static_assert(sizeof(state_t) <= 512u, "the settings sector holds 512 bytes");
 _Static_assert(G_COUNT <= G_SAVED && S_COUNT <= S_SAVED && P_COUNT <= P_SAVED, "the saved state: room");
+/* an older state (0x7A08 .. 0x7A0A): its layers had room for 40 (P_SAVED_V3), its name right after them */
+#define STATE_V3_SIZE (__builtin_offsetof(state_t, p) + NLAYER * P_SAVED_V3 * 2u + PS_NAME)
 static void state_load(void)
 {
     static state_t s;
-    uint32_t i, n, nc, ne;
+    const int16_t *sp = (const int16_t *)s.p;
+    const char *name;
+    uint32_t i, n, nc, ne, room;
     params_defaults();
     for (i = 0; i < NPRESET; i++)
         ps_index(i);
-    if (settings_load(&s, sizeof s))
-        s.magic = 0;
+    if (!settings_load(&s, sizeof s) && s.magic == STATE_MAGIC)
+        room = P_SAVED;
+    else if (!settings_load(&s, STATE_V3_SIZE) && s.magic != STATE_MAGIC)
+        room = P_SAVED_V3;
+    else
+        s.magic = 0, room = 0;
+    name = room == P_SAVED ? s.name : (const char *)sp + NLAYER * P_SAVED_V3 * 2u;
     ne = s.magic == STATE_MAGIC_16 ? 16u : NEPAR;  /* the engine values it holds */
-    if ((s.magic != STATE_MAGIC && s.magic != STATE_MAGIC_20 && s.magic != STATE_MAGIC_16) || s.ng > G_SAVED ||
-        s.ns > S_SAVED || s.np < ne || s.np > P_SAVED || s.nl != NLAYER) {
+    if ((s.magic != STATE_MAGIC && s.magic != STATE_MAGIC_40 && s.magic != STATE_MAGIC_20 &&
+         s.magic != STATE_MAGIC_16) || s.ng > G_SAVED || s.ns > S_SAVED || s.np < ne || s.np > room ||
+        s.nl != NLAYER) {
         ps_load(0);                                /* nothing saved, or a layout we do not know: the first preset */
         return;
     }
@@ -545,16 +573,16 @@ static void state_load(void)
     nc = s.np - ne;                                /* the commons saved; then the engine's ne */
     for (n = 0; n < NLAYER; n++) {
         for (i = 0; i < NCOMMON && i < nc; i++)
-            trk[n].p[i] = s.p[n][i];               /* (an engine this build lacks: layers.c plays ENGINES[0]) */
+            trk[n].p[i] = sp[n * room + i];        /* (an engine this build lacks: layers.c plays ENGINES[0]) */
         for (i = 0; i < ne; i++)
-            trk[n].p[P_E0 + i] = s.p[n][nc + i];
-        if (s.magic != STATE_MAGIC)
+            trk[n].p[P_E0 + i] = sp[n * room + nc + i];
+        if (s.magic != STATE_MAGIC && s.magic != STATE_MAGIC_40)
             ps_edit5_defaults(n);
     }
     s_own = (uint8_t)(s.own & ((1u << NGROUP) - 1u));
     ps.cur = (uint8_t)(s.cur % NPRESET);
     ps_edited = s.edited ? 1u : 0u;
-    name_set(ps.name, s.name, PS_NAME);
+    name_set(ps.name, name, PS_NAME);
     par_dirty++;
 }
 

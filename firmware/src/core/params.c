@@ -57,6 +57,8 @@ static const param_desc_t COMMON[NCOMMON] = {
     [P_TONE_A] = {"-", F_INT, 0, 0, 0, 0, 0},
     [P_TONE_B] = {"-", F_INT, 0, 0, 0, 0, 0},
     [P_TONE_C] = {"-", F_INT, 0, 0, 0, 0, 0},
+    [P_QUIRKS] = {"QUIRKS", F_INT, 0, 100, 0, 0, "%"},   /* (core/layers.c layer_quirk; 0: every note true) */
+    [P_QSET] = {"QUIRK SET", F_INT, 0, 127, 0, 0, 0},
 };
 /* the sound's (the defaults are the global copy's at first) */
 static const param_desc_t SOUND[S_COUNT] = {

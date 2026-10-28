@@ -158,7 +158,7 @@ static void tsx_note(const char *what, uint32_t k) /* the header says it a momen
 
 static int tsx_rec_good(const ps_rec_t *r)
 {
-    return ps_ok(r) && r->nl >= 1u && r->nl <= PS_NL && r->np > ps_nepar(r) && r->np <= PS_NP && r->ns <= PS_NS;
+    return ps_ok(r) && r->nl >= 1u && r->nl <= PS_NL && r->np > ps_nepar(r) && r->np <= ps_np_room(r) && r->ns <= PS_NS;
 }
 
 /* one command: data d (n bytes) -> o (*on bytes); the status */

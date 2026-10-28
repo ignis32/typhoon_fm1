@@ -33,6 +33,9 @@ enum {
                                       * at the start (a chiff of noise) */
     P_TONE, P_TONE_A, P_TONE_B, P_TONE_C,   /* the TONE stage after the engine (core/tone.c): its type, three knobs
                                       * whose meaning follows the type */
+    P_QUIRKS, P_QSET,                /* QUIRKS: each fingered note a little off in pitch and level, the same way every
+                                      * time (an instrument's own intonation), 0 .. 100 %; QUIRK SET: which set of
+                                      * quirks (core/layers.c layer_quirk) */
     P_E0, P_E1, P_E2, P_E3, P_E4, P_E5, P_E6, P_E7,
     P_E8, P_E9, P_E10, P_E11, P_E12, P_E13, P_E14, P_E15,
     P_E16, P_E17, P_E18, P_E19,
