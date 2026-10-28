@@ -15,7 +15,7 @@ export default function (t) {
     ex.sim_preset(255);
     if (noise) {                                    // white noise through a low-pass near 13 kHz at breath 100: the
       ex.sim_par_set(LN(0, C.P_ENGINE), f.engine(C.ENG_ID_EVA));   // NOISE engine through the mix's LP until
-      ex.sim_par_set(LN(0, C.P_E0 + 1), 11);        // 2026-10-28, now EVA: WAVE NS_WHITE, its LP2 at CUTOFF 112
+      ex.sim_par_set(LN(0, C.P_E0 + 1), C.EW_WHITE);   // 2026-10-28, now EVA: WAVE NS_WHITE, its LP2 at CUTOFF 112
       ex.sim_par_set(LN(0, C.P_E0 + 3), 112);       // (RT60 measures the burst's spectrum too: the same one)
       ex.sim_par_set(LN(0, C.P_E0 + 6), 0);         // VIB
     }

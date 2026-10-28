@@ -13,7 +13,8 @@ import { fileURLToPath } from 'url';
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SOURCES = ['app/app.c', 'firmware/src/core/layers.h', 'firmware/src/engines/engines.h',
   'firmware/src/ui/layout.h', 'firmware/src/core/reverb.c', 'firmware/src/core/sysex.c', 'firmware/src/core/tone.c',
-  'firmware/src/engines/felucca_engine.h', 'firmware/src/engines/ers/ers.h', 'firmware/src/engines/ers/eng_ers.c'];
+  'firmware/src/engines/felucca_engine.h', 'firmware/src/engines/ers/ers.h', 'firmware/src/engines/ers/eng_ers.c',
+  'firmware/src/engines/eva/eng_eva.c'];
 
 function read() {
   const out = {};

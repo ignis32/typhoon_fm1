@@ -65,5 +65,26 @@ export default async function (t) {
   const e5 = [0, 1].map((l) => [16, 17, 18, 19].map((k) => ex.sim_par_get(t.LN(l, C.P_E0 + k))).join(' '));
   check(e5.every((s) => s === '60 20 40 64') && ex.sim_par_get(t.LN(0, C.P_QUIRKS)) === 0,
     `records: a version 1 record's ERS layers get EDIT 5 as they played (${e5.join(' / ')}), QUIRKS off`);
+  // an EVA layer from before SINE (version < 4): its wave after TRI one lower then, one higher now (SYNC was 6, is 7)
+  ex.sim_preset(255);
+  ex.sim_par_set(t.LN(0, C.P_ENGINE), t.engine(C.ENG_ID_EVA)); ex.sim_par_set(t.LN(0, C.P_E0 + 1), C.EW_SYNC);
+  await ed.save(61, 'EVA OLD');
+  const r4 = await ed.read(61), o = P_AT + (0 * NP4 + C.P_E0 + 1) * 2;
+  check(get(r4, o) === C.EW_SYNC, `records: EVA's SYNC saved as ${get(r4, o)}`);
+  put(r4, o, C.EW_SYNC - 1);                      // (as a version 3 record held it: SYNC 6)
+  // version 3's layout: room for 40 a layer, 19 commons (no QUIRKS yet), then the 20 engine values
+  const r3 = r4.slice();
+  for (let q = P_AT; q < P_AT + NL * NP4 * 2 + NS * 2; q++) r3[q] = 0;
+  for (let l = 0; l < r4[9]; l++) {
+    for (let i = 0; i < NC1; i++) put(r3, P_AT + (l * NP3 + i) * 2, get(r4, P_AT + (l * NP4 + i) * 2));
+    for (let k = 0; k < 20; k++) put(r3, P_AT + (l * NP3 + NC1 + k) * 2, get(r4, P_AT + (l * NP4 + C.P_E0 + k) * 2));
+  }
+  for (let i = 0; i < NS; i++) put(r3, P_AT + NL * NP3 * 2 + i * 2, get(r4, P_AT + NL * NP4 * 2 + i * 2));
+  r3[8] = 3; r3[10] = NC1 + 20;
+  const c = TSX.crc32(r3.slice(8));
+  r3[4] = c & 255; r3[5] = (c >>> 8) & 255; r3[6] = (c >>> 16) & 255; r3[7] = (c >>> 24) & 255;
+  await ed.write(62, r3);
+  ex.sim_preset(62);
+  check(ex.sim_par_get(t.LN(0, C.P_E0 + 1)) === C.EW_SYNC, `records: a version 3 record's EVA wave 6 (SYNC then) plays SYNC (${ex.sim_par_get(t.LN(0, C.P_E0 + 1))})`);
   link.close();
 }

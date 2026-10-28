@@ -34,7 +34,8 @@
 #define PS_HI_AT (17u * 0x1000u)                   /* slots 65 .. 96: sectors 17 .. 20 (after the BT stack's 16) */
 #define PS_HI_COPY ((NPRESET - PS_LO) / PS_PER_SEC * 0x1000u)   /* their copy right after (sectors 21 .. 24) */
 #define PS_MAGIC 0x31505254u                       /* "TRP1" */
-#define PS_VER 4u                                  /* 4: 48 values a layer (QUIRKS); 3: EDIT 5 (P_E16 ..) as saved; 2:
+#define PS_VER 4u                                  /* 4: 48 values a layer (QUIRKS), EVA's SINE wave (below 4, the
+                                                    * waves after TRI one higher: ps_eva_waves); 3: EDIT 5 (P_E16 ..) as saved; 2:
                                                     * NEPAR engine values, EDIT 5 meaning nothing yet; 1: 16 (until
                                                     * 2026-10-28). Below 3, EDIT 5 takes the engine's defaults
                                                     * (ps_edit5_defaults); below 4, room for 40 a layer (ps_val) */
@@ -233,7 +234,7 @@ static const factory_t FACTORY[] = {
     {"SAX EXPRESS", {ENG(0, ENG_ID_ERS, 38), PAR(0, P_E8, 55), PAR(0, P_E9, 58), PAR(0, P_E10, 45), PAR(0, P_E12, 28),
                      PAR(0, P_E13, 58), PAR(0, P_E14, 72), PAR(0, P_E15, 35), SND(S_VOLUME, 119), PAR(0, P_TRANS, -12),
                      SND(S_REV_TYPE, 0), SND(S_REV_MIX, 26), SND(S_DLY_MIX, 10)}},
-    {"BANSURI VIB", {ENG(0, ENG_ID_ERS, 32), PAR(0, P_E8, 70), PAR(0, P_E9, 50), PAR(0, P_E11, 20), PAR(0, P_E12, 80),
+    {"BANSURI VIB", {ENG(0, ENG_ID_ERS, 32), PAR(0, P_E8, 70), PAR(0, P_E9, 50), PAR(0, P_E12, 80),
                      PAR(0, P_E15, 50), SND(S_VOLUME, 46), PAR(0, P_TRANS, -12), SND(S_REV_TYPE, 1), SND(S_REV_MIX, 45),
                      SND(S_REV_DECAY, 100), SND(S_REV_PRE, 40)}},
     {"BARK TRUMPET", {ENG(0, ENG_ID_ERS, 9), PAR(0, P_E8, 40), PAR(0, P_E9, 70), PAR(0, P_E10, 110), PAR(0, P_E13, 76),
@@ -389,7 +390,8 @@ static void factory_apply(uint32_t k)
 
 /* a layer from a record or state from before 2026-10-28 (version < 3), as it sounded: EDIT 5 (P_E16 ..) at its
  * engine's defaults (ERS's and FM's breath LP: the mix's old one), then what had no knob then at what it was: the
- * vibrato's swell, 400 ms (VIB SWELL 64; EVA's, ERS's), and EVA's RESPONSE (kept in its slot) as LAG = 128 - it */
+ * vibrato's swell, 400 ms (VIB SWELL 64; EVA's, ERS's); and no lag on the breath (EVA's and ERS's LAG 0: the user,
+ * 2026-10-28, a delay only as a swell) */
 static void ps_edit5_defaults(uint32_t l)
 {
     const engine_t *e = layer_engine(l);
@@ -398,10 +400,20 @@ static void ps_edit5_defaults(uint32_t l)
     for (k = 16u; k < NEPAR; k++)
         p[P_E0 + k] = e->edit[k].def;
     if (p[P_ENGINE] == ENG_ID_EVA) {
-        p[P_E0 + 15] = (int16_t)clamp(128 - p[P_E0 + 15], 1, 127);   /* LAG */
+        p[P_E0 + 15] = 0;                                          /* LAG none (RESPONSE was there) */
         p[P_E0 + 16] = 64;                                         /* VIB SWELL */
-    } else if (p[P_ENGINE] == ENG_ID_ERS)
+    } else if (p[P_ENGINE] == ENG_ID_ERS) {
+        p[P_E0 + 11] = 0;                                          /* LAG none (meant nothing 2026-10-23 .. 28) */
         p[P_E0 + 19] = 64;                                         /* VIB SWELL */
+    }
+}
+/* a layer from a record or state from before version 4 (2026-10-28): EVA's waves after TRI one higher (SINE came in
+ * after it: eng_eva.c EW_SINE) */
+static void ps_eva_waves(uint32_t l)
+{
+    int16_t *p = trk[l].p;
+    if (p[P_ENGINE] == ENG_ID_EVA && p[P_E0 + 1] >= 4)
+        p[P_E0 + 1]++;
 }
 
 static void ps_apply(const ps_rec_t *r)
@@ -415,6 +427,8 @@ static void ps_apply(const ps_rec_t *r)
             trk[l].p[P_E0 + i] = (int16_t)ps_val(r, l, nc + i);
         if (r->ver < 3u)
             ps_edit5_defaults(l);
+        if (r->ver < 4u)
+            ps_eva_waves(l);
     }
     for (i = 0; i < S_COUNT; i++)
         sown[i] = i < r->ns && i < PS_NS ? (int16_t)ps_sval(r, i) : sglob[i];
@@ -578,6 +592,8 @@ static void state_load(void)
             trk[n].p[P_E0 + i] = sp[n * room + nc + i];
         if (s.magic != STATE_MAGIC && s.magic != STATE_MAGIC_40)
             ps_edit5_defaults(n);
+        if (s.magic != STATE_MAGIC)
+            ps_eva_waves(n);
     }
     s_own = (uint8_t)(s.own & ((1u << NGROUP) - 1u));
     ps.cur = (uint8_t)(s.cur % NPRESET);

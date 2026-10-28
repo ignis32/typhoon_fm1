@@ -1,0 +1,45 @@
+# Lag watch: everything that can stand between breath / a note and the sound
+
+Kept current: any change that adds, removes or moves a delay updates this file in the same commit. Why: hidden
+lags (EVA's followers, ERS's LAG, a 20 ms breath smoothing) once made typhoon feel as if Bluetooth or the breath
+sensor were slow (2026-10-23, 2026-10-27). The rule: a delay on the breath is a knob, 0 on a new layer and in the
+factory presets; the only delay presets carry is the vibrato's swell. Last checked: 2026-10-28.
+
+**How to measure:** a breath step in the simulator, the level of each ms after it, time to 90 % of the new level.
+`tests/sim/smooth.test.mjs` (SMOOTH, EVA at LAG 0: 5 ms), `tests/sim/eva.test.mjs` "EVA LAG" (LAG 0: at once;
+64: 16 ms; 127: 43 ms). A sine through everything at defaults: ~3 ms, the measure's own window.
+
+## The path, in order
+
+| # | Where | What | Size | Visible | Status |
+|---|---|---|---|---|---|
+| 1 | the re.corder | how often it sends breath (CC11 / CC2) | unknown, its firmware | — | to measure: CCs a second on the BLE log |
+| 2 | Bluetooth, BLE-C (typhoon the central, the re.corder its device) | connection interval: MIDI comes at most once per interval | **30 ms asked** (base/ble/midi/le_midi.c `mc_conn.conn_interval = 24`), the device may ask for less | no | **to measure** on the FM-1: the log's `conn: interval N` (x 1.25 ms). If 30 ms holds: up to 30 ms late, ~15 on average, bunched. Candidate fix: ask 7.5 ms (6), a patch on fm1-base, tried on the device first (two links, the radio busier) |
+| 3 | Bluetooth, BLE-P (a computer the central) | the computer's interval | macOS / iOS ~11-15 ms; the FM-1 asks (le_midi.c connection_param_table) | no | the computer decides |
+| 4 | Bluetooth in (radio.c) | notes and CCs at once; only clock / start / stop held to the sender's timestamps | 0 for notes | — | fine |
+| 5 | USB MIDI | polled 2 kHz | 0.5 ms | — | fine |
+| 6 | breath in: SMOOTH (G_BSMOOTH, GLO > BREATH IN) | a one-pole on the breath CC | 0 ms by default (5 until 2026-10-24, 20 until 2026-10-23) | knob | fine at 0 |
+| 7 | breath in: the CURVE | shape only | 0 | knobs | fine |
+| 8 | LEAPS HOLD (core/leap.c) | an upward slurred jump of OVER semitones or more waits up to WAIT for the next note (the thumb's passing notes) | 30 ms, only those jumps | knobs (LEAPS OFF: none) | by design; watch if leaps feel late |
+| 9 | control rate | breath, pitch, levels updated each block of CTL 32 samples, interpolated within | 0.7 ms | — | fine |
+| 10 | layer: ENVELOPE ATTACK | the level's rise on a tongued note | 0 by default; no factory preset has one | knob | fine |
+| 11 | layer: BR>AMP | linear, at once | 0 | knob | fine |
+| 12 | layer: QUIRKS | a fixed offset per fingering | 0 | knobs | no lag |
+| 13 | EVA LAG | level, filter, the waves breath plays follow the breath | 0 in presets and new layers; 64: 8 / 25 ms (filter 12 / 40) | knob | **0 everywhere** (the user, 2026-10-28) |
+| 14 | EVA VIB SWELL | the vibrato's depth comes in | 64 = 400 ms in presets | knob | the one delay presets carry: vibrato only, not the response |
+| 15 | EVA HARMONIC wave | its harmonic count glides | ~3.6 ms (EVA_HARM_GLIDE) | constant in eng_eva.c's block | kept (a de-zipper: no steps as breath moves in 128 steps) |
+| 16 | ERS LAG | the pressure follows the breath | 0 in presets and new layers; up to ~90 ms | knob | **0 everywhere** |
+| 17 | ERS VIB SWELL | the vibrato's depth comes in | 64 = 400 ms in presets | knob | vibrato only |
+| 18 | ERS FREE REED exciter (HARMONICA, BLUES HARP, ACCORDION, REED ORGAN, MELODICA, SHENG ...) | the reed's swing follows the breath | ~8 ms | constant ERS_FREE_SWING (ers.h) | kept (the user, 2026-10-28) |
+| 19 | ERS flute windway (FLUE) | the jet smoothed | ~0.3 ms | constant ERS_FLUE_WW (ers.h) | negligible |
+| 20 | FM index | glides over one block | 0.7 ms | — | a de-zipper |
+| 21 | breath LP (ERS, FM EDIT 5) | a filter, no follower | 0 | knobs | no lag (a darker sound is not a later one) |
+| 22 | TONE SWEEP | opens by how fast breath rises | by design | knobs | an effect of speed, not a delay |
+| 23 | effects: DETUNE's copies, DELAY, reverb PRE-DLY | late copies beside the dry, which is at once | knobs | knobs | not on the dry path |
+| 24 | audio out | the render a block (APP_BLOCK 256 frames, 5.8 ms) ahead of the DAC | ~6 .. 12 ms | — | the platform; fine |
+
+## What to do when something feels late
+
+1. Read the BLE log's interval (row 2): the likeliest one we do not control yet.
+2. Check SMOOTH is 0 and the preset's LAGs are 0 (rows 6, 13, 16).
+3. Run the breath-step checks above; a new number over a few ms is a regression.

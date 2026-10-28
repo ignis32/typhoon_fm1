@@ -91,6 +91,12 @@
 #define ERS_NM 5
 #define ERS_ONE 16384
 #define ERS_MAGIC 0x45525323
+/* ERS's fixed numbers that delay the response (notes/03-lag-watch.md; the rest of its numbers still inline, to name) */
+#define ERS_FREE_SWING 48                          /* FREE REED: the reed's swing follows the breath 48 / 16384 a
+                                                    * sample, ~8 ms: a free reed speaks softly, building up (kept,
+                                                    * 2026-10-28) */
+#define ERS_FLUE_WW 1200                           /* FLUE: the windway steadies the jet, 1200 / 16384 a sample, ~0.3
+                                                    * ms (a pipe's jet, not the player's breath) */
 
 enum { EX_NOISE, EX_REED, EX_OSC, EX_BOW, EX_LIP, EX_DREED, EX_SAX, EX_JET, EX_FREE, EX_FM, ERS_NEXC };
 enum { RS_TUBE, RS_MODAL, RS_FORMANT, RS_BYPASS, RS_CONE, RS_BRASS, RS_HOLE, RS_PIPE, RS_CAVITY, RS_SAX, ERS_NRES };

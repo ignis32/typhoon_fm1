@@ -40,7 +40,7 @@ static void ers_free(ers_blk_t *b)
     uint32_t ph = b->v->ph[0], inc = b->m->inc, i;
     for (i = 0; i < b->n; i++) {
         int32_t pc = clamp(ers_p(b, i), 0, ERS_ONE), sw, ov, a, a2;
-        st->fa += ((pc - st->fa) * 48) >> 14;
+        st->fa += ((pc - st->fa) * ERS_FREE_SWING) >> 14;
         sw = (osc_sine(ph) * st->fa) >> 15;        /* where the reed is, Q14 */
         ov = ((1638 + b->col * 90) * (8192 + (st->fa >> 1))) >> 14;   /* the overlap (0.1 .. 0.8), less when soft */
         a = sw > ov ? sw - ov : 0;

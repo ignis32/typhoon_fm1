@@ -94,7 +94,7 @@ export default function (t) {
   const c1 = hf2(take(() => ex.sim_par_set(E(14), 127), 20, 5)), c0 = hf2(take(() => {}, 20, 5));
   check(c1 > c0 * 1.3, `EVA CHIFF: noise at the start (${c1.toFixed(3)} vs ${c0.toFixed(3)})`);
   // LAG 0: no lag, a breath step is there in the next few milliseconds (SMOOTH 0), loudness and brightness alike;
-  // LAG 64 (EVA BRASS's: its RESPONSE 64): the level ~8 ms, the cutoff ~12 to come up, as until 2026-10-27
+  // LAG 64 (RESPONSE 64's, fixed until 2026-10-27): the level ~8 ms, the cutoff ~12 to come up
   // (A5: the level of each ms, the rms of the 4 periods from there; to 90 % of the level 60 .. 80 ms after the step)
   const step = (lag) => {
     fresh(0); ex.sim_par_set(E(6), 0); ex.sim_par_set(E(5), 64); ex.sim_par_set(E(15), lag);
@@ -109,7 +109,7 @@ export default function (t) {
   check(s0 <= 5 && s64 >= 10, `EVA LAG: 0 at 90 % of the new level ${s0} ms after a breath step (at once: the measure's own ` +
     `4.5 ms), 64 in ${s64} ms (RESPONSE 64's 8 ms attack, as until 2026-10-27)`);
   fresh(0);
-  check(ex.sim_par_get(E(15)) === 64 && ex.sim_par_get(E(16)) === 64, 'EVA BRASS: LAG 64 (its RESPONSE 64), VIB SWELL 64, as it played until 2026-10-27');
+  check(ex.sim_par_get(E(15)) === 0 && ex.sim_par_get(E(16)) === 64, 'EVA BRASS: LAG 0 (no lag on the breath in any preset), VIB SWELL 64 (the vibrato\'s 400 ms swell, as it was)');
   // VIB SWELL: 0 the vibrato there at once at full breath, 64 coming in over ~400 ms
   const swell = (sw) => {
     fresh(0); ex.sim_par_set(E(16), sw); ex.sim_par_set(E(6), 127);
@@ -134,20 +134,20 @@ export default function (t) {
   };
   const cen = (h) => h.reduce((s, v, i) => s + (i + 1) * v, 0) / h.reduce((s, v) => s + v, 0);   // (in harmonics)
   const grow = (w) => cen(harm(w, 127)) / cen(harm(w, 30));
-  const gs = grow(0), gy = grow(6), gh = grow(8);
+  const gs = grow(C.EW_SAW), gy = grow(C.EW_SYNC), gh = grow(C.EW_HARM);
   // (through the global breath curve: on LOW 0, the default since 2026-10-24, breath 30 is already a quarter blown, so
   // the growth is x1.21 / x1.26 SAW's; x1.3 and more on LOW 8)
   check(gy > gs * 1.15 && gh > gs * 1.15, `EVA SYNC, HARMONIC: higher harmonics blown harder (the centroid x${gy.toFixed(2)}, x${gh.toFixed(2)}; SAW x${gs.toFixed(2)})`);
-  const pw = (b) => { const h = harm(7, b); return h[1] / h[0]; };
+  const pw = (b) => { const h = harm(C.EW_BPWM, b); return h[1] / h[0]; };
   const p45 = pw(45), p127 = pw(127);
   check(p45 > 3 * p127, `EVA BR PWM: thin blown softly (2nd harmonic ${p45.toFixed(2)} of the 1st), square blown hard (${p127.toFixed(3)})`);
   const pf = (w) => { fresh(0); ex.sim_par_set(E(6), 0); ex.sim_par_set(E(1), w); ex.sim_midi(0xB0, 2, 100); ex.sim_midi(0x90, 69, 80); run(500); const f = t.pitch(300, 150, 600); t.off(69, 800); return f; };
-  const fsub = pf(9), fsup = pf(10);
+  const fsub = pf(C.EW_SUB), fsup = pf(C.EW_SUPER);
   check(Math.abs(1200 * Math.log2(fsub / 220)) < 15 && Math.abs(1200 * Math.log2(fsup / 440)) < 15, `EVA SUB at A3 (${fsub.toFixed(1)} Hz), SUPERSAW at A4 (${fsup.toFixed(1)} Hz)`);
 
   // the noises: WHITE, PINK, BROWN each about as loud as SAW (the filter open far above), darker in that order;
   // TUNED rings on the note blown hard, wider (brighter) blown softly
-  const W_WHITE = 11, W_PINK = 12, W_BROWN = 13, W_TUNED = 14;
+  const W_WHITE = C.EW_WHITE, W_PINK = C.EW_PINK, W_BROWN = C.EW_BROWN, W_TUNED = C.EW_TUNED;
   const play = (w, b, note = 57) => {
     fresh(0); ex.sim_par_set(E(6), 0); ex.sim_par_set(E(1), w); ex.sim_par_set(E(3), 127); ex.sim_par_set(E(5), 64);
     ex.sim_midi(0xB0, 2, b); ex.sim_midi(0x90, note, 80); run(500);
@@ -164,6 +164,10 @@ export default function (t) {
     for (const v of x) { const s0 = v + c * s1 - s2; s2 = s1; s1 = s0; }
     return Math.sqrt(s1 * s1 + s2 * s2 - c * s1 * s2) / (rms(x) * x.length);
   };
+  {                                              // SINE (2026-10-28): as loud as SAW, all of it on the note (a sine: 0.707)
+    const sine = play(C.EW_SINE, 110), d = 20 * Math.log10(rms(sine) / saw), on = on220(sine);
+    check(Math.abs(d) < 2 && on > 0.69, `EVA SINE: as loud as SAW (${d.toFixed(1)} dB), a sine (${on.toFixed(3)} of it on A3, 0.707 pure)`);
+  }
   // (on the note: A3's bin over the whole, 0.707 for a sine, ~0.02 for white noise; crossings are no measure of
   // a noise this narrow, they wander with the noise)
   const dt = 20 * Math.log10(rms(hard) / saw), th = on220(hard), ts = on220(soft);

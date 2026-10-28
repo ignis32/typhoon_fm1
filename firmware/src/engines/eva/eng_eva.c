@@ -13,7 +13,7 @@
  *   NS_PINK, NS_BROWN, NS_TUNED) + chiff -> filter (LP2, LP4, BP, HP: TPT SVF) -> waveshaper -> formant -> gain, tremolo
  *
  * Page 1:  BREATH  how much of the breath reaches the slots (BR_LVL: 80 = 0.8; what breath moves, + vmod.shape)
- *          WAVE    SAW, PULSE, SQUARE, TRI, MULTI, DBL;
+ *          WAVE    SAW, PULSE, SQUARE, TRI, SINE (as loud as a saw), MULTI, DBL;
  *                  SYNC     a saw hard-synced to the note, its own pitch 1 .. 4 x up with the breath: the lead's tear
  *                  BR PWM   a pulse, thin (8 %) blown softly .. square blown hard
  *                  HARMONIC additive: the harmonics come in one by one with the breath, 1 (a sine) .. 16 (a saw's)
@@ -65,11 +65,14 @@ static eva_t eva_st[NLAYER];
 
 /* (the maths, the oscillators, the noises and the filter: dsp/dspf.c, shared; EVA's own until 2026-10-28) */
 
-enum { EW_SAW, EW_PULSE, EW_SQUARE, EW_TRI, EW_MULTI, EW_DBL, EW_SYNC, EW_BPWM, EW_HARM, EW_SUB, EW_SUPER,
+/* (SINE came in after TRI, 2026-10-28: a preset saved before it has the waves after TRI one lower, and is read so:
+ * core/presets.c ps_upgrade) */
+enum { EW_SAW, EW_PULSE, EW_SQUARE, EW_TRI, EW_SINE, EW_MULTI, EW_DBL, EW_SYNC, EW_BPWM, EW_HARM, EW_SUB, EW_SUPER,
        EW_WHITE, EW_PINK, EW_BROWN, EW_TUNED, EVA_NWAVE };
-static const char *const EVA_N_WAVE[EVA_NWAVE] = {"SAW", "PULSE", "SQUARE", "TRI", "MULTI", "DBL", "SYNC", "BR PWM",
-                                                  "HARMONIC", "SUB", "SUPERSAW", "NS_WHITE", "NS_PINK", "NS_BROWN",
-                                                  "NS_TUNED"};   /* (NS_: the noises, told apart and together) */
+static const char *const EVA_N_WAVE[EVA_NWAVE] = {"SAW", "PULSE", "SQUARE", "TRI", "SINE", "MULTI", "DBL", "SYNC",
+                                                  "BR PWM", "HARMONIC", "SUB", "SUPERSAW", "NS_WHITE", "NS_PINK",
+                                                  "NS_BROWN", "NS_TUNED"};   /* (NS_: the noises, told apart and
+                                                                              * together) */
 
 /* SYNC: a saw at r x the note, restarted at each of the note's cycles. polyBLEP on both steps (its own wrap, the
  * restart), the sample before a step corrected too: one sample late */
@@ -149,6 +152,7 @@ static float eva_sync(eva_t *s, float dt, float r)
 #define EVA_SWELL_MS 400.f                         /* VIB SWELL 64: in over 400 ms (x (SWELL / 64)^2) ... */
 #define EVA_SWELL_OUT 0.375f                       /* ... out in 3/8 of it (150 ms): fixed so until 2026-10-27 */
 /* -- the waves */
+#define EVA_SINE_LVL 0.8165f                       /* SINE x 0.8165: a sine's rms 0.707 to a saw's 0.577, as loud */
 #define EVA_PULSE_W 0.35f                          /* PULSE's width (and MULTI's pulse): hollower than a square */
 #define EVA_MULTI_DT 1.0026f                       /* MULTI's second wave 4.5 cents up: a slow beating */
 #define EVA_DBL_HZ 1.5f                            /* DBL's width LFO: 1.5 Hz at C4, faster up the keyboard */
@@ -339,6 +343,7 @@ static void eva_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const v
         case EW_PULSE: o = dspf_pulse(s->ph, dt, EVA_PULSE_W); break;
         case EW_SQUARE: o = dspf_pulse(s->ph, dt, 0.5f); break;
         case EW_TRI: o = 1.f - 4.f * (s->ph < 0.5f ? 0.5f - s->ph : s->ph - 0.5f) * 1.f; o = -o; break;
+        case EW_SINE: o = EVA_SINE_LVL * dspf_sin(s->ph); break;
         case EW_MULTI: o = 0.6f * (dspf_saw(s->ph, dt) + dspf_pulse(s->ph2, dt, EVA_PULSE_W)); break;   /* (0.6: the
                                                     * two together near one wave's level) */
         case EW_DBL: o = 0.5f * (dspf_saw(s->ph, dt) + dspf_pulse(s->ph, dt, w)); break;
@@ -408,11 +413,11 @@ static void eva_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const v
     s->a3 = b3;
 }
 
-/* (rsp: each preset's RESPONSE as it was made: its LAG is 128 - rsp, its VIB SWELL 64, so it plays as it did until
- * 2026-10-27; rsp 128: no lag) */
+/* (rsp: each preset's RESPONSE as it was made, kept for the record and read by nothing: every preset has LAG 0, the
+ * breath at once, and VIB SWELL 64, the vibrato's 400 ms swell as it was; the user, 2026-10-28: a delay only as a
+ * swell) */
 #define EAP(n, b, w, sed, cut, res, swp, vib, shp, flt, vow, fmt, trm, rate, kt, chf, rsp) \
-    {n, {b, w, sed, cut, res, swp, vib, shp, flt, vow, fmt, trm, rate, kt, chf, 128 - (rsp), 64}, {0, 0, 127, 25}, 0, 1, \
-     {0}, 0}
+    {n, {b, w, sed, cut, res, swp, vib, shp, flt, vow, fmt, trm, rate, kt, chf, 0, 64}, {0, 0, 127, 25}, 0, 1, {0}, 0}
 static const preset_t EVA_PRESETS[] = {
     /*   name          BREATH WAVE      S.E.D. CUT RES SWP VIB SHP  FILTER  VOW FMT TRM RATE KT CHF RSP */
     EAP("EVA BRASS",   80, EW_SAW,    76,    64, 19, 72, 64,  0, EF_LP2,  0,  0,  0, 64, 38,  0, 64),   /* the init sound */

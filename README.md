@@ -22,7 +22,9 @@ The version is in `VERSION` (every build carries it: the header at power-on, Sys
 - **Since 0.3:** the engines FM, ANALOG, ERS and EVA (SINE, NOISE, FOLD and VOWEL removed: FM at INDEX 0 is the
   sine, EVA has the noises, NS_*); 20 knobs an engine (EDIT 5), older presets read as they were. The mix's
   BREATH LP is ERS's and FM's own (EDIT 5). Every delay on breath is a knob, 0 (none) on a new layer: EVA LAG and
-  VIB SWELL, ERS LAG and VIB SWELL; the factory presets have them as they played before. QUIRKS (ARP's third page):
+  VIB SWELL, ERS LAG and VIB SWELL; LAG is 0 in every factory preset (the breath at once), the only delay they
+  carry is the vibrato's swell. Every delay between breath and sound is listed in `notes/03-lag-watch.md`. EVA has a
+  SINE wave (after TRI). QUIRKS (ARP's third page):
   each fingered note a little off in pitch and level, the same way every time, as a real instrument's tone holes;
   QUIRK SET picks another instrument's (EVA's hidden random humanise is gone).
 - **0.2** (2026-10-17, as tornado, on its earlier GPL platform; not in this repository) — the first usable one. BLE central, tilt → pitch

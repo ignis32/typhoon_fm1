@@ -27,7 +27,7 @@ static void ers_bore_flute(ers_blk_t *b)
         tmp = y;
         pj = pi ? 13435 + (pi >> 1) : 0;           /* blown from just over the threshold (~0.8: STK 1.1 .. 1.3) */
         if (flue) {                                /* the windway: a steadier jet */
-            st->ww += ((pj - st->ww) * 1200) >> 14;
+            st->ww += ((pj - st->ww) * ERS_FLUE_WW) >> 14;
             pj = st->ww;
         }
         if (b->exc == EX_JET) {                    /* turbulence follows the flow; the chiff */
