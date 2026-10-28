@@ -183,4 +183,20 @@ export default function (t) {
   ex.sim_midi(0xB0, 2, 100); ex.sim_midi(0x90, 64, 80); const p3 = run(20); t.off(64, 800);
   check(p0 > 0.03 && p1 < p0 / 30 && p2 < p0 / 30 && p3 > 0.03,
     `EVA PINK as a puff: on a tongued note (${p0.toFixed(3)}), gone while blown (${p1.toExponential(1)}), not on a slur (${p2.toExponential(1)}), again tongued (${p3.toFixed(3)})`);
+
+  // breath rising a step at a time: the level rises smoothly, no jump (until 2026-10-28 dspf_log2 stepped EVA's laws
+  // by 1 .. 3 dB at 1/2, 1/4, 1/8 of the breath: EVA LEAD at CC 73 -> 74). EVA LEAD (SQUARE, S.E.D. 90), VIB 0; each
+  // step's change against its neighbours' (a jump stands out of a smooth curve)
+  fresh(2);
+  ex.sim_par_set(L1(C.P_E0 + 6), 0);
+  ex.sim_midi(0xB0, 2, 30); ex.sim_midi(0x90, 74, 80); run(300);
+  const sw = [];
+  for (let b = 30; b <= 127; b++) { ex.sim_midi(0xB0, 2, b); run(40); sw.push(20 * Math.log10(rms(grab(60)))); }
+  t.off(74, 800);
+  let worst = 0, at = 0;
+  for (let i = 2; i < sw.length - 2; i++) {
+    const d = sw[i] - sw[i - 1], around = (Math.abs(sw[i - 1] - sw[i - 2]) + Math.abs(sw[i + 1] - sw[i])) / 2;
+    if (d - around > worst) { worst = d - around; at = 30 + i; }
+  }
+  check(worst < 0.3, `EVA: breath 30 .. 127 a step at a time, the level smooth (the biggest step over its neighbours' ${worst.toFixed(2)} dB, at CC ${at})`);
 }

@@ -37,7 +37,10 @@ static inline float dspf_log2(float x)             /* x > 0 */
     e = (int32_t)((v.u >> 23) & 255u) - 127;
     v.u = (v.u & 0x007FFFFFu) | 0x3F800000u;
     m = v.f;
-    return (float)e - 1.7417939f + (2.8212026f + (-1.4699568f + (0.44717955f - 0.056570851f * m) * m) * m) * m;
+    /* the polynomial is ln(m) on 1 .. 2 (0 .. 0.693): x 1/ln 2 makes it log2, continuous into the next octave. Until
+     * 2026-10-28 it was added as it was: up to 0.31 low inside each octave, a jump at every power of two (EVA's level
+     * and filter laws, dspf_pow, stepped by 1 .. 3 dB at 1/2, 1/4, 1/8 of the breath) */
+    return (float)e + 1.4426950f * (-1.7417939f + (2.8212026f + (-1.4699568f + (0.44717955f - 0.056570851f * m) * m) * m) * m);
 }
 static inline float dspf_pow(float y, float e) { return y <= 0.f ? 0.f : dspf_exp2(e * dspf_log2(y)); }
 static inline float dspf_sqrt(float x)             /* (x <= 0: 0) one guess from the exponent, two Newton steps */
