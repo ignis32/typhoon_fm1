@@ -63,7 +63,8 @@ typedef struct {
 } eva_t;
 static eva_t eva_st[NLAYER];
 
-/* (the maths, the oscillators, the noises and the filter: dsp/dspf.c, shared; EVA's own until 2026-10-28) */
+/* (the maths and the filter: dsp/dspf.c; the waves, every one as loud as a saw: dsp/oscf.c. Shared, EVA's own until
+ * 2026-10-28) */
 
 /* (SINE came in after TRI, 2026-10-28: a preset saved before it has the waves after TRI one lower, and is read so:
  * core/presets.c ps_upgrade) */
@@ -73,40 +74,6 @@ static const char *const EVA_N_WAVE[EVA_NWAVE] = {"SAW", "PULSE", "SQUARE", "TRI
                                                   "BR PWM", "HARMONIC", "SUB", "SUPERSAW", "NS_WHITE", "NS_PINK",
                                                   "NS_BROWN", "NS_TUNED"};   /* (NS_: the noises, told apart and
                                                                               * together) */
-
-/* SYNC: a saw at r x the note, restarted at each of the note's cycles. polyBLEP on both steps (its own wrap, the
- * restart), the sample before a step corrected too: one sample late */
-static float eva_sync(eva_t *s, float dt, float r)
-{
-    float d2 = dt * r, cur, pre = 0.f, h, d;
-    s->ph += dt;
-    s->ph2 += d2;
-    if (s->ph >= 1.f) {                            /* the restart, d of a sample ago */
-        float at;
-        s->ph -= 1.f;
-        d = s->ph / dt;
-        at = s->ph2 - d * d2;
-        if (at >= 1.f) at -= 1.f;                  /* (its own wrap first: let it go) */
-        s->ph2 = d * d2;
-        cur = 2.f * s->ph2 - 1.f;
-        h = -2.f * at;                             /* (from 2 at - 1 down to -1) */
-        pre += 0.5f * h * d * d;
-        cur -= 0.5f * h * (1.f - d) * (1.f - d);
-    } else {
-        if (s->ph2 >= 1.f) {
-            s->ph2 -= 1.f;
-            d = s->ph2 / d2;
-            if (d > 1.f) d = 1.f;
-            cur = 2.f * s->ph2 - 1.f;
-            pre -= d * d;
-            cur += (1.f - d) * (1.f - d);
-        } else
-            cur = 2.f * s->ph2 - 1.f;
-    }
-    h = s->prev + pre;
-    s->prev = cur;
-    return h;
-}
 
 /* ==== EVA's fixed numbers: everything that shapes its sound and is not a knob, and why (the rule: a knob, or here) ====
  * (the control rate: a block of CTL = 32 samples, 1378 a second at 44.1 kHz; a step a block of 1 - e^(-1000/(t f))
@@ -152,8 +119,11 @@ static float eva_sync(eva_t *s, float dt, float r)
 #define EVA_SWELL_MS 400.f                         /* VIB SWELL 64: in over 400 ms (x (SWELL / 64)^2) ... */
 #define EVA_SWELL_OUT 0.375f                       /* ... out in 3/8 of it (150 ms): fixed so until 2026-10-27 */
 /* -- the waves */
-#define EVA_SINE_LVL 0.8165f                       /* SINE x 0.8165: a sine's rms 0.707 to a saw's 0.577, as loud */
-#define EVA_PULSE_W 0.35f                          /* PULSE's width (and MULTI's pulse): hollower than a square */
+/* every wave as loud as SAW at the oscillator, before the filter: the same LEVEL, the same loudness, whatever the WAVE
+ * (2026-10-28; PULSE, SQUARE, BR PWM were +4.8 dB, MULTI +3.3, DBL -4, SUPERSAW -3 .. -5). The waves and their levels
+ * are dsp/oscf.c's; here only what EVA moves them with (widths, spreads, breath) */
+#define EVA_PULSE_W 0.35f                          /* PULSE's width (MULTI's: OSCF_MULTI_W, the same): hollower than a
+                                                    * square */
 #define EVA_MULTI_DT 1.0026f                       /* MULTI's second wave 4.5 cents up: a slow beating */
 #define EVA_DBL_HZ 1.5f                            /* DBL's width LFO: 1.5 Hz at C4, faster up the keyboard */
 #define EVA_DBL_DEPTH 0.3f                         /* its sweep, 0.2 .. 0.8 */
@@ -163,19 +133,12 @@ static float eva_sync(eva_t *s, float dt, float r)
 #define EVA_HARM_MAX 15.f                          /* HARMONIC: 1 + 15 x breath harmonics */
 #define EVA_HARM_GLIDE 0.2f                        /* their count glides 0.2 a block (~3.6 ms): no steps as breath
                                                     * moves in its 128 steps (a de-zipper, not a lag you play) */
-#define EVA_HARM_TOP 0.45f                         /* none above 0.45 fs: no aliasing */
-#define EVA_SUB_SAW 0.6f                           /* SUB: the saw ... */
-#define EVA_SUB_SQ 0.5f                            /* ... and the square an octave below it */
 #define EVA_SUPER_CENTS 0.0115f                    /* SUPERSAW's spread, +-20 cents (as a ratio) ... */
 #define EVA_SUPER_SOFT 0.6f                        /* ... 60 % of it blown softly, all of it hard */
-#define EVA_SUPER_MID 0.32f                        /* the middle saw's level ... */
-#define EVA_SUPER_SIDE 0.22f                       /* ... each of the six around it */
-static const float EVA_SPREAD[6] = {-1.f, -0.62f, -0.3f, 0.29f, 0.6f, 0.98f};   /* SUPERSAW's six, x the spread:
-                                                    * uneven, so they never line up */
-#define EVA_PINK_GAIN 0.3333f                      /* NS_PINK x 1/3: dspf_pink's rms is 1.73, a saw's 0.577 */
 #define EVA_TUNED_K_SOFT 0.5f                      /* NS_TUNED's damping blown softly (wide: a breath) ... */
 #define EVA_TUNED_K_LOG -4.644f                    /* ... x 2^(-4.644 breath): 0.02 hard (narrow: almost a tone) */
-#define EVA_TUNED_RMS 0.577f                       /* its gain: as loud as a saw (rms ~ sqrt(k fc / fs), measured) */
+#define EVA_TUNED_RMS 0.5135f                      /* its gain: as loud as a saw (rms ~ sqrt(k fc / fs); 0.5135
+                                                    * measured against SAW, 2026-10-28: 0.577 was +1 dB) */
 /* -- the rest of the chain */
 #define EVA_CHIFF_LVL 0.35f                        /* CHIFF 127: the burst at 0.35 x sqrt(breath) */
 #define EVA_CHIFF 0.9761f                          /* its decay a block: 30 ms */
@@ -194,24 +157,6 @@ static const float EVA_SPREAD[6] = {-1.f, -0.62f, -0.3f, 0.29f, 0.6f, 0.98f};   
  * not used); EVA's own table of the same until 2026-10-28 */
 static const uint8_t EVA_VOWEL[5] = {DSP_VOWEL_A, DSP_VOWEL_E, DSP_VOWEL_I, DSP_VOWEL_O, DSP_VOWEL_U};
 /* ==== */
-
-/* HARMONIC: sin k x, k = 1 .. n (the last one faded in), 1 / k each, below 0.45 fs (Chebyshev: one sine a sample) */
-static float eva_harm(float ph, float dt, float n)
-{
-    float c = dspf_sin(ph + 0.25f >= 1.f ? ph - 0.75f : ph + 0.25f), s1 = dspf_sin(ph), s0 = 0.f, sk = s1, y = 0.f;
-    int32_t k, top = (int32_t)n + 1;
-    if ((float)top * dt > EVA_HARM_TOP) top = (int32_t)(EVA_HARM_TOP / dt);
-    if (top > 16) top = 16;
-    for (k = 1; k <= top; k++) {
-        float a = 1.f / (float)k, t;
-        if (k == top && (float)k > n) a *= n - (float)(k - 1);   /* (the last one fading in) */
-        y += a * sk;
-        t = 2.f * c * sk - s0;
-        s0 = sk;
-        sk = t;
-    }
-    return 0.6f * y;                               /* (0.6: the sum of 1 / k up to 16 kept near a saw's peak) */
-}
 
 enum { EF_LP2, EF_LP4, EF_BP, EF_HP, EVA_NFILT };
 static const char *const EVA_N_FILT[EVA_NFILT] = {"LP2", "LP4", "BP", "HP"};
@@ -251,7 +196,7 @@ static void eva_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const v
     float fmt = (float)p[P_E10] / 127.f, vw, tr, tr0, tr1;
     float ch0, ch1, ck = (float)p[P_E14] * (EVA_CHIFF_LVL / 127.f) * dspf_sqrt(br), fk = EVA_FMT_K;
     dspf_svf_t cf, cv1, cv2, ct = {0.f, 0.f, 0.f};   /* the filter's, the formant's two, TUNED's resonator */
-    float tk = 0.f, tg = 0.f;
+    float tk = 0.f, tg = 0.f, gp, gw, sp;          /* (gp, gw: PULSE's and BR PWM's gains; sp: SUPERSAW's spread) */
     uint32_t i, j;
     (void)v;
     br = dspf_clamp(br, 0.f, 1.f);
@@ -333,8 +278,10 @@ static void eva_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const v
         dspf_svf_coef(tf, tk, &ct);
         tg = EVA_TUNED_RMS / dspf_sqrt(tk * tf / (float)FS);
     }
-    if (wave == EW_SUPER && s->ss[0] == 0.f)       /* (their phases spread from the start) */
-        for (j = 0; j < 6u; j++) s->ss[j] = 0.13f + 0.141f * (float)j;
+    if (wave == EW_SUPER) oscf_supersaw_init(s->ss);
+    sp = EVA_SUPER_CENTS * (EVA_SUPER_SOFT + (1.f - EVA_SUPER_SOFT) * s->zw);   /* (SUPERSAW: +-12 .. 20 cents) */
+    gp = oscf_pulse_gain(EVA_PULSE_W);             /* (once a block: a square root each) */
+    gw = wave == EW_BPWM ? oscf_pulse_gain(w) : 1.f;
     g0 = s->gain;
     g1 = s->gain = amp;
     ch0 = s->chiff * ck;
@@ -346,41 +293,26 @@ static void eva_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const v
         float f = (float)i / (float)n, a1 = s->a1 + (b1 - s->a1) * f, a2 = s->a2 + (b2 - s->a2) * f;
         float a3 = s->a3 + (b3 - s->a3) * f, o, v1, v2, y, ch = ch0 + (ch1 - ch0) * f;
         switch (wave) {
-        case EW_PULSE: o = dspf_pulse(s->ph, dt, EVA_PULSE_W); break;
-        case EW_SQUARE: o = dspf_pulse(s->ph, dt, 0.5f); break;
-        case EW_TRI: o = 1.f - 4.f * (s->ph < 0.5f ? 0.5f - s->ph : s->ph - 0.5f) * 1.f; o = -o; break;
-        case EW_SINE: o = EVA_SINE_LVL * dspf_sin(s->ph); break;
-        case EW_MULTI: o = 0.6f * (dspf_saw(s->ph, dt) + dspf_pulse(s->ph2, dt, EVA_PULSE_W)); break;   /* (0.6: the
-                                                    * two together near one wave's level) */
-        case EW_DBL: o = 0.5f * (dspf_saw(s->ph, dt) + dspf_pulse(s->ph, dt, w)); break;
-        case EW_SYNC: o = eva_sync(s, dt, 1.f + EVA_SYNC_SPAN * s->zw); break;
-        case EW_BPWM: o = dspf_pulse(s->ph, dt, w); break;
-        case EW_HARM: o = eva_harm(s->ph, dt, s->nh); break;
-        case EW_SUB:
-            o = EVA_SUB_SAW * dspf_saw(s->ph, dt) + EVA_SUB_SQ * dspf_pulse(s->ph3, 0.5f * dt, 0.5f);
-            s->ph3 += 0.5f * dt;
-            if (s->ph3 >= 1.f) s->ph3 -= 1.f;
-            break;
-        case EW_SUPER: {
-            float sp = EVA_SUPER_CENTS * (EVA_SUPER_SOFT + 0.4f * s->zw), d3;   /* (+-20 cents, 12 blown softly) */
-            o = EVA_SUPER_MID * dspf_saw(s->ph, dt);
-            for (j = 0; j < 6u; j++) {
-                d3 = dt * (1.f + sp * EVA_SPREAD[j]);
-                o += EVA_SUPER_SIDE * dspf_saw(s->ss[j], d3);
-                s->ss[j] += d3;
-                if (s->ss[j] >= 1.f) s->ss[j] -= 1.f;
-            }
-            break;
-        }
-        case EW_WHITE: o = dspf_urand(&s->noise); break;
-        case EW_PINK: o = EVA_PINK_GAIN * dspf_pink(s->nz, dspf_urand(&s->noise)); break;
-        case EW_BROWN: o = dspf_brown(&s->nz[3], dspf_urand(&s->noise)); break;
+        case EW_PULSE: o = oscf_pulse(s->ph, dt, EVA_PULSE_W, gp); break;
+        case EW_SQUARE: o = oscf_pulse(s->ph, dt, 0.5f, OSCF_LVL); break;   /* (a square's gain: OSCF_LVL itself) */
+        case EW_TRI: o = oscf_tri(s->ph); break;
+        case EW_SINE: o = oscf_sine(s->ph); break;
+        case EW_MULTI: o = oscf_multi(s->ph, s->ph2, dt); break;
+        case EW_DBL: o = oscf_dbl(s->ph, dt, w); break;
+        case EW_SYNC: o = oscf_sync(&s->ph, &s->ph2, &s->prev, dt, 1.f + EVA_SYNC_SPAN * s->zw); break;
+        case EW_BPWM: o = oscf_pulse(s->ph, dt, w, gw); break;   /* (its gain follows its width: level as it thins) */
+        case EW_HARM: o = oscf_harm(s->ph, dt, s->nh); break;
+        case EW_SUB: o = oscf_sub(s->ph, &s->ph3, dt); break;
+        case EW_SUPER: o = oscf_supersaw(s->ph, s->ss, dt, sp); break;
+        case EW_WHITE: o = oscf_white(&s->noise); break;
+        case EW_PINK: o = oscf_pink(s->nz, &s->noise); break;
+        case EW_BROWN: o = oscf_brown(&s->nz[3], &s->noise); break;
         case EW_TUNED: {                           /* white noise, its band-pass at the note (k bp: 1 at the centre) */
             float lp;
-            o = tg * tk * dspf_svf(dspf_urand(&s->noise), ct.a1, ct.a2, ct.a3, s->tz, &lp);
+            o = tg * tk * dspf_svf(oscf_white(&s->noise), ct.a1, ct.a2, ct.a3, s->tz, &lp);
             break;
         }
-        default: o = dspf_saw(s->ph, dt);
+        default: o = oscf_saw(s->ph, dt);
         }
         if (wave != EW_SYNC) {                     /* (SYNC moves its own) */
             s->ph += dt;

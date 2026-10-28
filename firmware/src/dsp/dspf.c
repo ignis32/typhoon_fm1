@@ -6,8 +6,8 @@
  * 2026-10-28: these were its own).
  *
  *   maths     dspf_exp2, dspf_log2 (~1e-4), dspf_pow, dspf_sqrt, dspf_clamp, dspf_sin (sin 2 pi p), dspf_sat (tanh-like)
- *   osc       dspf_blep (polyBLEP), dspf_saw, dspf_pulse: band-limited, phase p and increment dt in cycles
- *   noise     dspf_rand, dspf_urand (-1 .. 1), dspf_pink (P. Kellet's three poles), dspf_brown (leaky, -6 dB/oct)
+ *   random    dspf_rand, dspf_urand (-1 .. 1)
+ *   (the oscillators and the noises: dsp/oscf.c, built on these)
  *   filter    a state-variable filter, trapezoidal (A. Simper's): dspf_svf_coef(fc, k) per block, dspf_svf a
  *             sample: its band-pass returned, its low-pass through lp; the high-pass is x - lp - k bp. k is the
  *             damping (2: none .. ~0.1: ringing); k bp is 1 at the centre. Coefficients may glide over a block:
@@ -64,35 +64,9 @@ static inline float dspf_sin(float p)              /* sin(2 pi p), p in 0 .. 1 (
     return y * (0.775f + 0.225f * (y < 0.f ? -y : y));
 }
 
-/* ---- oscillators */
-static inline float dspf_blep(float t, float dt)   /* polyBLEP */
-{
-    if (t < dt) { t /= dt; return t + t - t * t - 1.f; }
-    if (t > 1.f - dt) { t = (t - 1.f) / dt; return t * t + t + t + 1.f; }
-    return 0.f;
-}
-static inline float dspf_saw(float p, float dt) { return 2.f * p - 1.f - dspf_blep(p, dt); }
-static inline float dspf_pulse(float p, float dt, float w)
-{
-    float q = p + 1.f - w;
-    if (q >= 1.f) q -= 1.f;
-    return (p < w ? 1.f : -1.f) + dspf_blep(p, dt) - dspf_blep(q, dt);
-}
-
-/* ---- noise */
+/* ---- random numbers (the noises: dsp/oscf.c) */
 static inline uint32_t dspf_rand(uint32_t *s) { *s = *s * 1664525u + 1013904223u; return *s; }
 static inline float dspf_urand(uint32_t *s) { return (float)(int32_t)dspf_rand(s) * (1.f / 2147483648.f); }   /* -1 .. 1 */
-static inline float dspf_pink(float st[3], float w)   /* white w -> pink (-3 dB/oct); rms x 1.73 (x 1/3: a saw's) */
-{
-    st[0] = 0.99765f * st[0] + 0.0990460f * w;
-    st[1] = 0.96300f * st[1] + 0.2965164f * w;
-    st[2] = 0.57000f * st[2] + 1.0526913f * w;
-    return st[0] + st[1] + st[2] + 0.1848f * w;
-}
-static inline float dspf_brown(float *st, float w)   /* white w -> brown (-6 dB/oct above ~35 Hz), a saw's rms */
-{
-    return *st = 0.995f * *st + 0.1f * w;
-}
 
 /* ---- the state-variable filter */
 typedef struct { float a1, a2, a3; } dspf_svf_t;
