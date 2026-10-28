@@ -32,6 +32,7 @@ factory presets; the only delay presets carry is the vibrato's swell. Last check
 | 17 | ERS VIB SWELL | the vibrato's depth comes in | 64 = 400 ms in presets | knob | vibrato only |
 | 18 | ERS FREE REED exciter (HARMONICA, BLUES HARP, ACCORDION, REED ORGAN, MELODICA, SHENG ...) | the reed's swing follows the breath | ~8 ms | constant ERS_FREE_SWING (ers.h) | kept (the user, 2026-10-28) |
 | 19 | ERS flute windway (FLUE) | the jet smoothed | ~0.3 ms | constant ERS_FLUE_WW (ers.h) | negligible |
+| 19b | ERS SAX: a slur | the pressure dips by SAX_DIP, back in ~45 ms (a slurred note's softer start, modelled) | ~45 ms, slurs only | constant SAX_DIP (ers_bores.c's SAX block) | by design; watch if sax slurs feel soft or late |
 | 20 | FM index | glides over one block | 0.7 ms | — | a de-zipper |
 | 21 | breath LP (ERS, FM EDIT 5) | a filter, no follower | 0 | knobs | no lag (a darker sound is not a later one) |
 | 22 | TONE SWEEP | opens by how fast breath rises | by design | knobs | an effect of speed, not a delay |
