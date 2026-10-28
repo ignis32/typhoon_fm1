@@ -13,6 +13,8 @@
  *   one-poles by time  pole_k (Q15 a control block, the layer's: envelope, SMOOTH), pole_q14 (Q14 a block, rounded:
  *                      ERS's VIB SWELL) (were: core/layers.c pole_k, ERS's ers_pole; two roundings, kept so as they
  *                      were)
+ *   de-stepping        ctl_destep: a stepped control as a ramp, for what reacts to its CHANGE (TONE SWEEP's rise);
+ *                      never on what sets the level (below)
  *   conversions        Q15_127 (a 0 .. 127 knob as a Q15 level), CENTS_FINE / CENTS16_FINE (cents as m.fine's units),
  *                      tsvf_k (RES 0 .. 127 as the SVF's damping), and tsvf_coef with it (Felucca's, moved here)
  *   noise              noise_q14: dsp.c's noise32 as +-16384 (ERS's, FM's) */
@@ -80,4 +82,18 @@ static int32_t pole_q14(int32_t ms)                /* Q14 a block, 16384 / (1 + 
 {
     int32_t d = 1000 + ms * 1378;
     return (16384000 + d / 2) / d;
+}
+
+/* ---- de-stepping: a stepped control as a ramp, once a control block. A wind controller's breath comes in steps (the
+ * re.corder: ~50 a second, a few units each while playing, +-1 while held); what reacts to breath's CHANGE (a rise
+ * that bites, TONE SWEEP's) sees each step as an instant jump and fires at every one: a flutter at the step rate
+ * ("brbrbr"). Through this, a step reaches it as a rise over ~ms, the same rise in total.
+ * ONLY for what reacts to a change. NEVER on what sets the level (breath -> amplitude, BR>AMP, a layer's loudness):
+ * the level answers breath at once, the one measure of responsiveness (no hidden lags; notes/03-lag-watch.md lists
+ * every user). st: its state (start it at the control's value: no rise from nothing); x: the control; ms: its time
+ * (the user's constant, named where it is used) */
+static inline int32_t ctl_destep(int32_t *st, int32_t x, uint32_t ms)
+{
+    *st += ((x - *st) * pole_k(ms)) >> 15;         /* (x, st within +-65536: the product within 32 bits) */
+    return *st;
 }

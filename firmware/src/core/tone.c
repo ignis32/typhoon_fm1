@@ -19,10 +19,19 @@ enum { TN_OFF, TN_FILTER, TN_SWEEP, TN_TALK, TN_SUB, TN_COUNT };
 static const char *const N_TONE[TN_COUNT] = {"OFF", "FILTER", "SWEEP", "TALK", "SUB OCT"};
 static const char *const N_TONE_MODE[3] = {"LP", "BP", "HP"};
 
+/* -- TONE's fixed numbers (the rule: a knob, or here, with why) */
+#define TONE_SWEEP_DESTEP_MS 15u                   /* SWEEP's rise is read from breath de-stepped over 15 ms (dsp/dspx.c
+                                                    * ctl_destep), 2026-10-28: the re.corder's ~50 breath steps a second
+                                                    * each fired the accent (a "brbrbr" flutter at soft breath, where the
+                                                    * filter rests under the note). 15 ms is under a step's 20 and inside
+                                                    * a tongued attack's own ~40 ms ramp. Only the accent's bite is
+                                                    * spread so; the level and BR>TONE answer breath at once */
+
 static struct {
     uint8_t type;                                  /* the type the state is for */
     int32_t f[3][2];                               /* the filters' states */
-    int32_t sw, br;                                /* SWEEP: the accent, the last block's breath */
+    int32_t sw, br, bd;                            /* SWEEP: the accent; the last block's breath, de-stepped; its
+                                                    * de-stepper */
     uint32_t sub;                                  /* SUB OCT: its phase */
 } tone_st[NLAYER];
 
@@ -63,7 +72,7 @@ static void tone_block(uint32_t l, int32_t *buf, uint32_t n, const int16_t *p, c
     if (type != tone_st[l].type) {                 /* another type: a clean state */
         memset(&tone_st[l], 0, sizeof tone_st[l]);
         tone_st[l].type = (uint8_t)type;
-        tone_st[l].br = breath;
+        tone_st[l].br = tone_st[l].bd = breath;
     }
     switch (type) {
     case TN_FILTER: {
@@ -75,9 +84,9 @@ static void tone_block(uint32_t l, int32_t *buf, uint32_t n, const int16_t *p, c
         }
         break;
     }
-    case TN_SWEEP: {                               /* the accent: breath's rise, settling at SPEED */
-        int32_t rise = breath - tone_st[l].br;
-        tone_st[l].br = breath;
+    case TN_SWEEP: {                               /* the accent: breath's rise (de-stepped), settling at SPEED */
+        int32_t bd = ctl_destep(&tone_st[l].bd, breath, TONE_SWEEP_DESTEP_MS), rise = bd - tone_st[l].br;
+        tone_st[l].br = bd;
         if (rise > 0)
             tone_st[l].sw = clamp(tone_st[l].sw + rise * 4, 0, 32767);
         tone_st[l].sw -= (tone_st[l].sw * (8 + c * 3)) >> 12;   /* SPEED 0: ~1 s .. 127: ~60 ms */

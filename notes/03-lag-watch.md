@@ -36,8 +36,12 @@ factory presets; the only delay presets carry is the vibrato's swell. Last check
 | 20 | FM index | glides over one block | 0.7 ms | — | a de-zipper |
 | 21 | breath LP (ERS, FM EDIT 5) | a filter, no follower | 0 | knobs | no lag (a darker sound is not a later one) |
 | 22 | TONE SWEEP | opens by how fast breath rises | by design | knobs | an effect of speed, not a delay |
+| 22b | TONE SWEEP: its rise de-stepped (dsp/dspx.c ctl_destep) | the rise it reads is breath through a one-pole: the re.corder's ~50 breath steps a second each fired the accent (a "brbrbr" flutter at soft breath) | 15 ms, the accent's bite only; the level and BR>TONE at once | constant TONE_SWEEP_DESTEP_MS (core/tone.c) | the user, 2026-10-28: a shared de-stepper for what reacts to a change, never on the level |
 | 23 | effects: DETUNE's copies, DELAY, reverb PRE-DLY | late copies beside the dry, which is at once | knobs | knobs | not on the dry path |
 | 24 | audio out | the render a block (APP_BLOCK 256 frames, 5.8 ms) ahead of the DAC | ~6 .. 12 ms | — | the platform; fine |
+
+**ctl_destep's users** (dsp/dspx.c: for what reacts to a control's change; never on what sets the level): TONE
+SWEEP's rise (22b). A new user: a row here, its time a named constant beside it.
 
 ## What to do when something feels late
 
