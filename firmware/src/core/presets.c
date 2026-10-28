@@ -231,7 +231,7 @@ static const factory_t FACTORY[] = {
     {"SAX EXPRESS", {ENG(0, ENG_ID_ERS, 38), PAR(0, P_E8, 55), PAR(0, P_E9, 58), PAR(0, P_E10, 45), PAR(0, P_E12, 28),
                      PAR(0, P_E13, 58), PAR(0, P_E14, 72), PAR(0, P_E15, 35), SND(S_VOLUME, 119), PAR(0, P_TRANS, -12),
                      SND(S_REV_TYPE, 0), SND(S_REV_MIX, 26), SND(S_DLY_MIX, 10)}},
-    {"BANSURI VIB", {ENG(0, ENG_ID_ERS, 32), PAR(0, P_E8, 70), PAR(0, P_E9, 50), PAR(0, P_E12, 80),
+    {"BANSURI VIB", {ENG(0, ENG_ID_ERS, 32), PAR(0, P_E8, 70), PAR(0, P_E9, 50), PAR(0, P_E11, 20), PAR(0, P_E12, 80),
                      PAR(0, P_E15, 50), SND(S_VOLUME, 46), PAR(0, P_TRANS, -12), SND(S_REV_TYPE, 1), SND(S_REV_MIX, 45),
                      SND(S_REV_DECAY, 100), SND(S_REV_PRE, 40)}},
     {"BARK TRUMPET", {ENG(0, ENG_ID_ERS, 9), PAR(0, P_E8, 40), PAR(0, P_E9, 70), PAR(0, P_E10, 110), PAR(0, P_E13, 76),
@@ -372,14 +372,21 @@ static void factory_apply(uint32_t k)
     }
 }
 
-/* EDIT 5 (P_E16 ..) as layer l's engine has them by default: what a record or state from before EDIT 5 had a
- * meaning plays there (version < 3: ERS's and FM's breath LP at the mix's old one, as they sounded) */
+/* a layer from a record or state from before 2026-10-28 (version < 3), as it sounded: EDIT 5 (P_E16 ..) at its
+ * engine's defaults (ERS's and FM's breath LP: the mix's old one), then what had no knob then at what it was: the
+ * vibrato's swell, 400 ms (VIB SWELL 64; EVA's, ERS's), and EVA's RESPONSE (kept in its slot) as LAG = 128 - it */
 static void ps_edit5_defaults(uint32_t l)
 {
     const engine_t *e = layer_engine(l);
+    int16_t *p = trk[l].p;
     uint32_t k;
     for (k = 16u; k < NEPAR; k++)
-        trk[l].p[P_E0 + k] = e->edit[k].def;
+        p[P_E0 + k] = e->edit[k].def;
+    if (p[P_ENGINE] == ENG_ID_EVA) {
+        p[P_E0 + 15] = (int16_t)clamp(128 - p[P_E0 + 15], 1, 127);   /* LAG */
+        p[P_E0 + 16] = 64;                                         /* VIB SWELL */
+    } else if (p[P_ENGINE] == ENG_ID_ERS)
+        p[P_E0 + 19] = 64;                                         /* VIB SWELL */
 }
 
 static void ps_apply(const ps_rec_t *r)

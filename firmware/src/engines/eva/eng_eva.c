@@ -2,8 +2,9 @@
 /* Copyright (C) 2026 ignis32 */
 /* EVA: a breath synth in the line of the Steiner / Crumar EVI's brass synths. One breath, shaped separately for each
  * destination: the loudness, the cutoff and the vibrato each have their own threshold and curve, so blowing harder
- * is louder, brighter and livelier in different measure. Each follows the breath at once (2026-10-27: no attack /
- * release of their own; the breath's only smoothing is global, G_BSMOOTH). No ADSR: breath is the envelope.
+ * is louder, brighter and livelier in different measure. Each follows the breath at once unless LAG / VIB SWELL say
+ * otherwise, visibly (until 2026-10-27 fixed attacks / releases under RESPONSE; the presets have them as they were;
+ * the breath's own smoothing is global, G_BSMOOTH). No ADSR: breath is the envelope.
  * typhoon's layer does the rest as for every engine: notes and legato (note_on only for an articulated note), bend and
  * tilt, the breath curve, effects.
  *
@@ -28,7 +29,8 @@
  *          CUTOFF  the filter's floor, -3 .. +3 octaves (64: none)
  * Page 2:  RES     resonance
  *          SWEEP   a kick of the cutoff on each articulated note, decaying in 80 ms: -4 .. +4 octaves (64: none)
- *          VIB     vibrato depth (0 .. 60 cents): only above 55 % breath, deeper and faster blown harder
+ *          VIB     vibrato depth (0 .. 60 cents): only above 55 % breath, deeper and faster blown harder, coming in
+ *                  as fast as VIB SWELL says
  *          SHAPE   the waveshaper's drive, more of it with breath (0: off)
  * Page 3:  FILTER  LP2, LP4, BP, HP
  *          VOWEL   the formant's vowel, A E I O U (in between: between them)
@@ -37,7 +39,11 @@
  * Page 4:  RATE    the vibrato / tremolo LFO, 3 .. 8 Hz (64: 5.5)
  *          KEYTRK  the cutoff's key tracking, 0 .. 1 octave an octave from C4 (38: 0.3)
  *          CHIFF   a burst of bright noise on each articulated note, 30 ms, as loud as the breath at once (0: none)
- *          (empty: RESPONSE until 2026-10-27, how fast the level and the filter followed the breath)
+ *          LAG     how slowly the level, the filter and the waves breath plays follow the breath: 0 at once (the
+ *                  default); 64 attack 8 / release 25 ms (the filter and the waves 12 / 40: 90 % in ~16 ms), each 32
+ *                  twice as slow. RESPONSE until 2026-10-27, the other way round: LAG = 128 - RESPONSE
+ * Page 5:  VIB SWELL how long the vibrato and tremolo take to come in: 0 at once; 64 400 ms (out in 150), as it was
+ *                  fixed until 2026-10-27; 127 ~1.6 s
  * Fixed: AMP slot threshold 4 %; FILTER slot curve +0.3 (y^0.66), range 7 octaves; humanise 0.15.
  * Float (the AC79's single-precision FPU): its maths, oscillators, noises and filter are dsp/dspf.c's, shared. */
 
@@ -118,6 +124,11 @@ static float eva_harm(float ph, float dt, float n)
     return 0.6f * y;
 }
 
+/* LAG 64's attack / release steps at the control rate (44100 / 32 = 1378 Hz: 1 - e^(-1000 / (t f))), as RESPONSE 64's */
+#define EVA_A_ATK 0.0867f                          /* level 8 ms */
+#define EVA_A_REL 0.0286f                          /* level 25 ms */
+#define EVA_F_ATK 0.0587f                          /* filter 12 ms (and the waves breath plays) */
+#define EVA_F_REL 0.0180f                          /* filter 40 ms */
 #define EVA_SWEEP 0.99098f                         /* the sweep's decay a block, 80 ms */
 #define EVA_CHIFF 0.9761f                          /* the chiff's, 30 ms */
 /* the formants (Hz) of A E I O U (a man's voice) */
@@ -169,13 +180,20 @@ static void eva_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const v
     uint32_t i, j;
     (void)v;
     br = dspf_clamp(br, 0.f, 1.f);
-    /* the slots: BR_LVL, AMP's threshold; then AMP and FILTER each their curve, at once */
+    /* the slots: BR_LVL, AMP's threshold; then AMP and FILTER each their curve, at once or after LAG (64: 8 / 25 ms,
+     * the filter 12 / 40; each 32 twice as slow: RESPONSE's steps x 2^((64 - LAG) / 32), as RESPONSE = 128 - LAG did) */
     x = dspf_clamp(br * (float)p[P_E0] / 100.f, 0.f, 1.f);
     x = dspf_clamp((x - 0.04f) / 0.96f, 0.f, 1.f);
     s->y = x;
-    s->za = s->y;
     af = dspf_pow(s->y, 0.66f);                     /* (CURV +0.3: 4^-0.3) */
-    s->zf = af;
+    if (p[P_E15]) {
+        float rsp = dspf_exp2((64.f - (float)p[P_E15]) / 32.f);
+        s->za += dspf_clamp((s->y > s->za ? EVA_A_ATK : EVA_A_REL) * rsp, 0.f, 1.f) * (s->y - s->za);
+        s->zf += dspf_clamp((af > s->zf ? EVA_F_ATK : EVA_F_REL) * rsp, 0.f, 1.f) * (af - s->zf);
+    } else {
+        s->za = s->y;
+        s->zf = af;
+    }
     /* S.E.D.: the gain's law, the filter's depth and floor */
     amp = dspf_pow(s->za, 1.f - 0.75f * sed) * s->hg;
     oct = 2.3f + 3.f * (1.f - sed) + ((float)p[P_E3] - 64.f) * (3.f / 64.f)
@@ -195,8 +213,13 @@ static void eva_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const v
     vw -= (float)j;
     dspf_svf_coef(EVA_F1[j] + (EVA_F1[j + 1u] - EVA_F1[j]) * vw, fk, &cv1);
     dspf_svf_coef(EVA_F2[j] + (EVA_F2[j + 1u] - EVA_F2[j]) * vw, fk, &cv2);
-    /* vibrato: above 55 % breath, deeper and faster blown harder */
-    s->zv = dspf_clamp((br - 0.55f) / 0.45f, 0.f, 1.f);
+    /* vibrato: above 55 % breath, deeper and faster blown harder; in over VIB SWELL (64: 400 ms, out in 150) */
+    x = dspf_clamp((br - 0.55f) / 0.45f, 0.f, 1.f);
+    if (p[P_E16]) {
+        float ms = 400.f * (float)p[P_E16] * (float)p[P_E16] / 4096.f, t = x > s->zv ? ms : 0.375f * ms;
+        s->zv += (x - s->zv) / (1.f + t * ((float)FS / (float)CTL / 1000.f));   /* (a block's step: ~1 - e^(-1/(t f))) */
+    } else
+        s->zv = x;
     s->vib += (3.f + 5.f * (float)p[P_E12] / 127.f + 1.6f * s->zv) * (float)CTL / (float)FS;
     if (s->vib >= 1.f) s->vib -= 1.f;
     tr = s->vib + 0.25f;                           /* the tremolo: a quarter cycle on (louder as the pitch rises) */
@@ -211,7 +234,12 @@ static void eva_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const v
         w = 0.5f + 0.3f * dspf_sin(s->pwm);
     }
     wsd = shp * (0.5f + 0.5f * s->za) * 4.f;       /* the drive, more with breath */
-    s->zw = br;                                    /* the waves' breath: all of it, BREATH aside */
+    if (p[P_E15]) {                                /* the waves' breath: all of it, BREATH aside; after LAG as the filter
+                                                    * (LAG 64: 12 / 40 ms, as it was until 2026-10-27) */
+        float rsp = dspf_exp2((64.f - (float)p[P_E15]) / 32.f);
+        s->zw += dspf_clamp((br > s->zw ? EVA_F_ATK : EVA_F_REL) * rsp, 0.f, 1.f) * (br - s->zw);
+    } else
+        s->zw = br;
     if (wave == EW_BPWM)
         w = 0.08f + 0.42f * s->zw;
     if (wave == EW_HARM) {                         /* the harmonics with the breath, glided (no steps) */
@@ -309,9 +337,11 @@ static void eva_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const v
     s->a3 = b3;
 }
 
-/* (rsp: RESPONSE's old value, kept in the table, read by nothing since 2026-10-27) */
+/* (rsp: each preset's RESPONSE as it was made: its LAG is 128 - rsp, its VIB SWELL 64, so it plays as it did until
+ * 2026-10-27; 128: no lag) */
 #define EAP(n, b, w, sed, cut, res, swp, vib, shp, flt, vow, fmt, trm, rate, kt, chf, rsp) \
-    {n, {b, w, sed, cut, res, swp, vib, shp, flt, vow, fmt, trm, rate, kt, chf, rsp}, {0, 0, 127, 25}, 0, 1, {0}, 0}
+    {n, {b, w, sed, cut, res, swp, vib, shp, flt, vow, fmt, trm, rate, kt, chf, 128 - (rsp), 64}, {0, 0, 127, 25}, 0, 1, \
+     {0}, 0}
 static const preset_t EVA_PRESETS[] = {
     /*   name          BREATH WAVE      S.E.D. CUT RES SWP VIB SHP  FILTER  VOW FMT TRM RATE KT CHF RSP */
     EAP("EVA BRASS",   80, EW_SAW,    76,    64, 19, 72, 64,  0, EF_LP2,  0,  0,  0, 64, 38,  0, 64),   /* the init sound */
@@ -336,16 +366,17 @@ static const preset_t EVA_PRESETS[] = {
     EAP("EVA TRANCE",  85, EW_SUPER,  85,    58, 40, 84,  0, 10, EF_LP4,  0,  0,  0, 64, 38,  0, 80),
     /* the noises (18 ..): for a layer of its own beside a tone, quick to follow the breath, no vibrato. A puff wants
      * the layer's ENVELOPE short (ATTACK 0, DECAY ~30 .. 70 ms, SUSTAIN 0): on each tongued note, not on a slur */
-    EAP("EVA NS_PUFF", 127, EW_PINK,  30,    80, 25, 104, 0,  0, EF_LP2,  0,  0,  0, 64, 38,  0, 96),   /* "puh" */
-    EAP("EVA NS_CHIFF",127, EW_TUNED, 30,   100,  0, 64,  0,  0, EF_LP2,  0,  0,  0, 64, 38,  0, 96),   /* (TRANS +12) */
-    EAP("EVA NS_HUFF", 127, EW_BROWN, 30,    90,  0, 80,  0,  0, EF_LP2,  0,  0,  0, 64, 38,  0, 96),   /* "huh" */
-    EAP("EVA NS_AIR",  127, EW_PINK,  30,   104, 20, 64,  0,  0, EF_BP,   0,  0,  0, 64, 64,  0, 96),   /* (held) */
+    /* (LAG none, rsp 128: a puff at once; their levels were set without a lag, 2026-10-27) */
+    EAP("EVA NS_PUFF", 127, EW_PINK,  30,    80, 25, 104, 0,  0, EF_LP2,  0,  0,  0, 64, 38,  0, 128),   /* "puh" */
+    EAP("EVA NS_CHIFF",127, EW_TUNED, 30,   100,  0, 64,  0,  0, EF_LP2,  0,  0,  0, 64, 38,  0, 128),   /* (TRANS +12) */
+    EAP("EVA NS_HUFF", 127, EW_BROWN, 30,    90,  0, 80,  0,  0, EF_LP2,  0,  0,  0, 64, 38,  0, 128),   /* "huh" */
+    EAP("EVA NS_AIR",  127, EW_PINK,  30,   104, 20, 64,  0,  0, EF_BP,   0,  0,  0, 64, 64,  0, 128),   /* (held) */
 };
 #undef EAP
 
 static const engine_t ENG_EVA = {
     .name = "EVA",
-    .page_title = {"EVA", "EVA +", "EVA COLOUR", "EVA PLAY"},
+    .page_title = {"EVA", "EVA +", "EVA COLOUR", "EVA PLAY", "EVA VIB"},
     .edit = {
         {"BREATH", F_PCT, 0, 127, 80, 0, 0},
         {"WAVE", F_ENUM, 0, EVA_NWAVE - 1, EW_SAW, EVA_N_WAVE, 0},
@@ -362,7 +393,8 @@ static const engine_t ENG_EVA = {
         {"RATE", F_PCT, 0, 127, 64, 0, 0},
         {"KEYTRK", F_PCT, 0, 127, 38, 0, 0},
         {"CHIFF", F_PCT, 0, 127, 0, 0, 0},
-        {0},                                   /* (RESPONSE until 2026-10-27: breath smoothing is global only) */
+        {"LAG", F_PCT, 0, 127, 0, 0, 0},       /* (0 none; RESPONSE until 2026-10-27, the other way round) */
+        {"VIB SWELL", F_PCT, 0, 127, 0, 0, 0}, /* (0 none; 64 = 400 ms, fixed until 2026-10-27: the presets have it) */
     },
     .presets = EVA_PRESETS,
     .npresets = NELEM(EVA_PRESETS),

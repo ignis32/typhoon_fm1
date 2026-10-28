@@ -71,10 +71,10 @@ export default function (t) {
   const f = t.pitch(300, 400, 480);
   t.off(69, 800);
   check(Math.abs(1200 * Math.log2(f / 440)) < 15, `EVA: A4 at ${f.toFixed(1)} Hz`);
-  // EDIT 3 and 4: EVA's (EDIT x5 goes 1 2 3 4 TONE; an engine with 8 knobs skips them: tone.test.mjs)
+  // EDIT 3 .. 5: EVA's (EDIT x6 goes 1 2 3 4 5 TONE; an engine with 8 knobs skips them: tone.test.mjs)
   fresh(0);
-  const pages = []; for (let i = 0; i < 5; i++) { t.press(C.BTN_EDIT); pages.push(ex.sim_page_cur()); }
-  check(pages.join() === [C.PG_ENG1, C.PG_ENG2, C.PG_ENG3, C.PG_ENG4, C.PG_TONE].join(), `EVA: EDIT goes through its four pages, then TONE (${pages.join(' ')})`);
+  const pages = []; for (let i = 0; i < 6; i++) { t.press(C.BTN_EDIT); pages.push(ex.sim_page_cur()); }
+  check(pages.join() === [C.PG_ENG1, C.PG_ENG2, C.PG_ENG3, C.PG_ENG4, C.PG_ENG5, C.PG_TONE].join(), `EVA: EDIT goes through its five pages, then TONE (${pages.join(' ')})`);
   // the new knobs each do something: a held note at 100, one knob moved from the init sound
   const E = (k) => L1(C.P_E0 + k);
   const take = (set, ms = 300, skip = 400) => {
@@ -93,18 +93,33 @@ export default function (t) {
   check(tm > 1.4 && t0 < 1.1, `EVA TREM: the level moves (x${tm.toFixed(2)}, without x${t0.toFixed(2)})`);
   const c1 = hf2(take(() => ex.sim_par_set(E(14), 127), 20, 5)), c0 = hf2(take(() => {}, 20, 5));
   check(c1 > c0 * 1.3, `EVA CHIFF: noise at the start (${c1.toFixed(3)} vs ${c0.toFixed(3)})`);
-  // no lag of its own: a breath step is there in the next few milliseconds (SMOOTH 0), loudness and brightness alike
-  // (until 2026-10-27 the level took ~8 ms to come up, the cutoff ~12, more with RESPONSE low)
-  const step = () => {
-    fresh(0); ex.sim_par_set(E(6), 0); ex.sim_par_set(E(5), 64);
-    ex.sim_midi(0xB0, 2, 40); ex.sim_midi(0x90, 57, 80); run(300);
+  // LAG 0: no lag, a breath step is there in the next few milliseconds (SMOOTH 0), loudness and brightness alike;
+  // LAG 64 (EVA BRASS's: its RESPONSE 64): the level ~8 ms, the cutoff ~12 to come up, as until 2026-10-27
+  // (A5: the level of each ms, the rms of the 4 periods from there; to 90 % of the level 60 .. 80 ms after the step)
+  const step = (lag) => {
+    fresh(0); ex.sim_par_set(E(6), 0); ex.sim_par_set(E(5), 64); ex.sim_par_set(E(15), lag);
+    ex.sim_midi(0xB0, 2, 40); ex.sim_midi(0x90, 81, 80); run(300);
     ex.sim_midi(0xB0, 2, 120);
-    const x = grab(40); t.off(57, 800);
-    const a = x.slice(441, 882), b = x.slice(1323, 1764);   // 10 .. 20 ms, 30 .. 40 ms after the step
-    return { lv: rms(a) / rms(b), br: hf(a) / hf(b) };
+    const x = grab(90); t.off(81, 800);
+    const lev = (a) => rms(x.slice(Math.round(a * 44.1), Math.round(a * 44.1) + 200));
+    const env = Array.from({ length: 80 }, (_, i) => lev(i)), fin = env.slice(60).reduce((s, v) => s + v) / 20;
+    return env.findIndex((v) => v >= 0.9 * fin);
   };
-  const st = step();
-  check(st.lv > 0.95 && st.br > 0.95, `EVA: no lag of its own, at the new level and brightness 10 ms after a breath step (x${st.lv.toFixed(3)}, x${st.br.toFixed(3)} of 30 ms after)`);
+  const s0 = step(0), s64 = step(64);
+  check(s0 <= 5 && s64 >= 10, `EVA LAG: 0 at 90 % of the new level ${s0} ms after a breath step (at once: the measure's own ` +
+    `4.5 ms), 64 in ${s64} ms (RESPONSE 64's 8 ms attack, as until 2026-10-27)`);
+  fresh(0);
+  check(ex.sim_par_get(E(15)) === 64 && ex.sim_par_get(E(16)) === 64, 'EVA BRASS: LAG 64 (its RESPONSE 64), VIB SWELL 64, as it played until 2026-10-27');
+  // VIB SWELL: 0 the vibrato there at once at full breath, 64 coming in over ~400 ms
+  const swell = (sw) => {
+    fresh(0); ex.sim_par_set(E(16), sw); ex.sim_par_set(E(6), 127);
+    ex.sim_midi(0xB0, 2, 127); ex.sim_midi(0x90, 69, 80); run(60);
+    const f0 = [t.pitch(40, 380, 500)]; for (let i = 0; i < 6; i++) f0.push(t.pitch(40, 380, 500));
+    t.off(69, 800);
+    return Math.max(...f0) / Math.min(...f0);
+  };
+  const v0 = swell(0), v64 = swell(64);
+  check(v0 > v64 * 1.005, `EVA VIB SWELL: 0 the vibrato's swing at once (x${v0.toFixed(4)} in the first 0.3 s), 64 smaller then (x${v64.toFixed(4)})`);
   // the waves breath plays: SYNC, BR PWM, HARMONIC brighter blown harder (more than SAW gets from the filter alone,
   // the filter held open); SUB an octave down; SUPERSAW in tune
   const harm = (w, b) => {                        // the harmonics 1 .. 8 of A3 (Goertzel), the filter open far above

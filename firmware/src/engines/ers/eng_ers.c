@@ -9,10 +9,10 @@
 #include "ers_resonators.c"
 #include "ers_shapers.c"
 
-#define EP(n, b, x, c, r, d, br, s, a) {n, {b, x, c, r, d, br, s, a, 0, 64, 0, 0, 64, 64, 64, 0, 60, 20, 40, 0}, \
+#define EP(n, b, x, c, r, d, br, s, a) {n, {b, x, c, r, d, br, s, a, 0, 64, 0, 0, 64, 64, 64, 0, 60, 20, 40, 64}, \
                                         {0, 0, 127, 25}, 0, 1, {0}, 0}
-/* (EDIT 3 / 4 at their defaults: VIB 0, RATE 64, TONGUE 0, -, AIR 64, TILT 64, PR>PITCH 64, DRIFT 0; EDIT 5, the breath
- * LP, at the mix's old one: LP CUT 60, LP RES 20, BR>LP +40) */
+/* (EDIT 3 / 4 at their defaults: VIB 0, RATE 64, TONGUE 0, LAG 0, AIR 64, TILT 64, PR>PITCH 64, DRIFT 0; EDIT 5 as ERS
+ * played until 2026-10-28: the breath LP at the mix's old one, LP CUT 60, LP RES 20, BR>LP +40, VIB SWELL 64: 400 ms) */
 static const preset_t ERS_PRESETS[] = {
     /*  name          BLOW EXCITER    COLOR RESONATOR  DECAY BRIGHT SHAPER    AMOUNT */
     EP("FLUTE",       0, EX_NOISE,   30, RS_TUBE,    50, 70, SH_BYPASS,  0),
@@ -128,6 +128,13 @@ static void ers_note_on(track_t *t, voice_t *v)
         ers_st[(uint32_t)(t - trk) % NLAYER].ch = 1764;   /* JET: a 40 ms chiff (a fresh note only: no legato) */
 }
 
+/* a one-pole's step a block (Q14) for a time of ms: 16384 / (1 + ms x 1.378 blocks a ms), rounded */
+static int32_t ers_pole(int32_t ms)
+{
+    int32_t d = 1000 + ms * 1378;
+    return (16384000 + d / 2) / d;
+}
+
 static void ers_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const vmod_t *m)
 {
     const int16_t *p = t->p;
@@ -137,13 +144,25 @@ static void ers_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const v
     vmod_t mm = *m;                                /* (the note's increment, with VIB, PR>PITCH, DRIFT on it) */
     uint32_t inc8;
     ers_blk_t b;
+    if (p[P_E11]) {                                /* LAG: the pressure follows, 1 .. 1/128 a block */
+        int32_t k = p[P_E11] * 56 / 127, a = ERS_ONE >> (k >> 3);
+        a -= ((a >> 1) * (k & 7)) >> 3;
+        st->pl += ((pr - st->pl) * a) >> 14;
+        pr = st->pl;
+    } else
+        st->pl = pr;
     if (p[P_E10]) {                                /* TONGUE: a kick of the pressure, 40 ms */
         pr = clamp(pr + ((((pr * p[P_E10]) >> 8) * st->tg) >> 14), 0, 127 << 8);
         st->tg = (st->tg * 16088) >> 14;
     }
-    if (p[P_E8]) {                                 /* VIB: in above 55 % of a full tone, over 400 ms (out 150 ms) */
-        int32_t x = clamp((pr - 9011) * 16384 / 7373, 0, ERS_ONE);
-        st->zv += ((x - st->zv) * (x > st->zv ? 30 : 79)) >> 14;
+    if (p[P_E8]) {                                 /* VIB: in above 55 % of a full tone, over VIB SWELL (64: in 400 ms,
+                                                    * out 150; 0: at once) */
+        int32_t x = clamp((pr - 9011) * 16384 / 7373, 0, ERS_ONE), sw = p[P_E19];
+        if (sw) {                                  /* (SWELL 64: 400 ms in, 150 out: 30 and 79, as it was fixed) */
+            int32_t ms = 400 * sw * sw / 4096;
+            st->zv += ((x - st->zv) * ers_pole(x > st->zv ? ms : ms * 3 / 8)) >> 14;
+        } else
+            st->zv = x;
         st->vph += (uint32_t)(3u * 3117u + (uint32_t)p[P_E9] * 15340u / 127u) * 1000u;   /* 3 .. 8 Hz a block */
         c8 += (((p[P_E8] * 100) * ((sine_i(st->vph) * st->zv) >> 15)) >> 14);   /* (cents Q8: 50 at 127) */
     }
@@ -243,7 +262,7 @@ static const param_desc_t *ers_desc(const track_t *t, uint32_t k)
 
 static const engine_t ENG_ERS = {
     .name = "ERS",
-    .page_title = {"ERS", "ERS +", "ERS PLAY", "ERS AIR", "BREATH LP"},
+    .page_title = {"ERS", "ERS +", "ERS PLAY", "ERS AIR", "ERS BREATH"},
     .edit = {
         {"BLOW", F_PCT, 0, 127, 0, 0, 0},
         {"EXCITER", F_ENUM, 0, ERS_NEXC - 1, EX_NOISE, ERS_N_EXC, 0},
@@ -256,12 +275,13 @@ static const engine_t ENG_ERS = {
         {"VIB", F_PCT, 0, 127, 0, 0, 0},
         {"RATE", F_PCT, 0, 127, 64, 0, 0},
         {"TONGUE", F_PCT, 0, 127, 0, 0, 0},
-        {0},                                   /* (LAG until 2026-10-23: breath smoothing is global only) */
+        {"LAG", F_PCT, 0, 127, 0, 0, 0},       /* (back 2026-10-28, visible: 0 none; gone 2026-10-23 .. 28) */
         {"AIR", F_PCT, 0, 127, 64, 0, 0},
         {"TILT", F_PCT, 0, 127, 64, 0, 0},
         {"PR>PITCH", F_PCT, 0, 127, 64, 0, 0},
         {"DRIFT", F_PCT, 0, 127, 0, 0, 0},
         BLP_KNOBS,                             /* EDIT 5: the breath LP (dsp/breathlp.c; the mix's until 2026-10-28) */
+        {"VIB SWELL", F_PCT, 0, 127, 0, 0, 0},  /* (0 none; 64 = 400 ms, fixed until 2026-10-28: the presets have it) */
     },
     .presets = ERS_PRESETS,
     .npresets = NELEM(ERS_PRESETS),

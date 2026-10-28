@@ -42,7 +42,7 @@ export default function (t) {
     `SMOOTH sets the lag: a sine to 90 % in ${s0} ms at 0 (none), ${s5} ms at 5 ms, ${s40} ms at 40 ms`);
   const eva = t.engine(C.ENG_ID_EVA);
   if (eva >= 0) {
-    const fast = rise(() => { ex.sim_par_set(L1(C.P_ENGINE), eva); ex.sim_engine_preset(0, 0); ex.sim_par_set(L1(C.P_E0 + 15), 127); ex.sim_par_set(L1(C.P_E0 + 6), 0); });
-    check(fast <= 24, `EVA at RESPONSE 127: to 90 % in ${fast} ms (SMOOTH as by default, 0, and its own 2 ms attack, nothing hidden)`);
+    const fast = rise(() => { ex.sim_par_set(L1(C.P_ENGINE), eva); ex.sim_engine_preset(0, 0); ex.sim_par_set(L1(C.P_E0 + 15), 0); ex.sim_par_set(L1(C.P_E0 + 6), 0); });
+    check(fast <= 24, `EVA at LAG 0: to 90 % in ${fast} ms (SMOOTH as by default, 0; RESPONSE 127 until 2026-10-27, LAG 0 since)`);
   }
 }

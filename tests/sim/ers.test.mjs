@@ -150,8 +150,9 @@ export default function (t) {
     const v0 = wob(38, () => {}), v1 = wob(38, () => ex.sim_par_set(E(8), 127));
     check(v1 > 1.01 && v1 > v0 * 1.008, `ERS VIB: the pitch moves (x${v1.toFixed(4)}, without x${v0.toFixed(4)})`);
     const early = (set) => { play(38, set); const x = rms(grab(20)); end(); return x; };
-    const t0 = early(() => {}), t1 = early(() => ex.sim_par_set(E(10), 127));
+    const t0 = early(() => {}), t1 = early(() => ex.sim_par_set(E(10), 127)), l1 = early(() => ex.sim_par_set(E(11), 127));
     check(t1 > t0 * 1.15, `ERS TONGUE: a stronger start (${t1.toFixed(3)} vs ${t0.toFixed(3)} in the first 20 ms)`);
+    check(l1 < t0 * 0.7, `ERS LAG (back 2026-10-28, visible, 0 by default): a slower start at 127 (${l1.toFixed(3)} vs ${t0.toFixed(3)})`);
     const held = (k, set) => { play(k, set); run(600); const x = grab(300); end(); return x; };
     const fine = (x, lo, hi) => {                   // the period by autocorrelation, parabola-refined: Hz to a cent
       const r = (k) => { let s = 0; for (let i = 0; i + k < x.length; i++) s += x[i] * x[i + k]; return s; };

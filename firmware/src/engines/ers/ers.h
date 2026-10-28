@@ -52,10 +52,14 @@
  *                     resonances), AIR (breath noise on top, around the note), GROWL (a growl / flutter: the
  *                     pressure flutters ~30 Hz, a half-pitch roughness)
  *          AMOUNT     the shaper's (+ vmod.cutoff: BR>TONE moves it)
- * Page 3:  VIB        vibrato depth (0 .. 50 cents): in above 55 % of a full tone's pressure, over 400 ms
+ * Page 3:  VIB        vibrato depth (0 .. 50 cents): in above 55 % of a full tone's pressure, as fast as VIB SWELL says
  *          RATE       its rate, 3 .. 8 Hz (64: 5.5)
  *          TONGUE     a kick of the pressure on an articulated note, up to +50 %, gone in 40 ms: a bark, a bite
- *          -          (LAG until 2026-10-23: the breath's smoothing is global only, G_BSMOOTH)
+ *          LAG        how slowly the pressure follows the breath (0: at once .. ~90 ms): a heavier instrument. A lag
+ *                     of the engine's own, visible (gone 2026-10-23 .. 28; the presets that had it have it again)
+ * Page 5:  LP CUT, LP RES, BR>LP  the breath low-pass (dsp/breathlp.c: the mix's until 2026-10-28)
+ *          VIB SWELL  how long the vibrato takes to come in (0: at once; 64: 400 ms, out in 150, as it was fixed
+ *                     until 2026-10-28; 127: ~1.6 s)
  * Page 4:  AIR        the breath noise (the jet's, the mouth's, the sax's air, the AIR shaper's): 0 none, 64 as
  *                     modelled, 127 twice
  *          TILT       the tone's tilt around ~800 Hz: darker .. brighter (64: none)
@@ -115,7 +119,7 @@ typedef struct {
     int32_t md[ERS_NM][2], fm[3][2], sh[3][2];     /* modes, formants, the shaper's filters */
     int32_t seed;                                  /* noise */
     int32_t air;                                   /* AIR this block (64: as modelled) */
-    int32_t zv, tg, tl;                            /* the vibrato's onset; TONGUE's kick; TILT's low-pass */
+    int32_t zv, tg, pl, tl;                        /* the vibrato's onset; TONGUE's kick; LAG's pressure; TILT's low-pass */
     int32_t dr, dt, dn;                            /* DRIFT: where the pitch is, where it goes, blocks to the next */
     uint32_t vph;                                  /* the vibrato's phase */
 } ers_t;
