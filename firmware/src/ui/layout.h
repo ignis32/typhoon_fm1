@@ -34,7 +34,9 @@ enum {
 };
 #define PG_STAY 0xFFu
 static const ui_page_t PAGES[NPAGES] = {
-    [PG_BREATH] = {"BREATH LP", UK_KNOBS, 0, PG_STAY, {SP(S_LPF), SP(S_LPRES), SP(S_BR_LP), PR_NONE}},
+    [PG_BREATH] = {"BREATH", UK_KNOBS, 0, PG_STAY, {L(P_BR_AMP), L(P_BR_FLT), L(P_BR_SHP), PR_NONE}},   /* (HOME: how the
+                                                  * layer follows breath; the mix's BREATH LP until 2026-10-28, now
+                                                  * ERS's and FM's EDIT 5) */
     [PG_CURVE] = {"CURVE", UK_CURVE, 0, PG_STAY, {SP(S_BC_LO), SP(S_BC_HI), SP(S_BC_SHAPE), PR_NONE}},
     [PG_ENG1] = {0, UK_KNOBS, 1, PG_ENG2, {L(P_E0), L(P_E1), L(P_E2), L(P_E3)}},
     [PG_ENG2] = {0, UK_KNOBS, 2, PG_ENG3, {L(P_E4), L(P_E5), L(P_E6), L(P_E7)}},
@@ -50,7 +52,8 @@ static const ui_page_t PAGES[NPAGES] = {
     [PG_ENV] = {"ENVELOPE", UK_FOLLOW, 0, PG_ENV2, {L(P_ATK), L(P_DEC), L(P_SUS), L(P_REL)}},
     [PG_ENV2] = {"ENVELOPE +", UK_FOLLOW, 0, PG_ENV, {L(P_DELAY), L(P_BR_AMP), PR_NONE, PR_NONE}},
     [PG_LAYER] = {"LAYER", UK_KNOBS, 0, PG_LAYER2, {L(P_ENGINE), L(P_LEVEL), L(P_TRANS), L(P_PAN)}},
-    [PG_LAYER2] = {"BREATH", UK_KNOBS, 0, PG_LAYER, {L(P_BR_FLT), L(P_BR_SHP), L(P_FTYPE), L(P_FINE)}},
+    [PG_LAYER2] = {"LAYER +", UK_KNOBS, 0, PG_LAYER, {L(P_BR_FLT), L(P_BR_SHP), L(P_FTYPE), L(P_FINE)}},   /* ("BREATH"
+                                                  * until 2026-10-28: HOME's page is now) */
     [PG_MIX] = {"MIX", UK_KNOBS, 0, PG_STAY, {LN(0, P_LEVEL), LN(1, P_LEVEL), LN(2, P_LEVEL), SP(S_VOLUME)}},
     [PG_GLOBAL] = {"GLOBAL", UK_KNOBS, 0, PG_BT, {G(G_BSRC), G(G_BEND), G(G_XPOSE), PR_NONE}},   /* (KNOB 4: Bluetooth
                                                   * until 2026-10-24, now on its own page) */
@@ -65,12 +68,12 @@ static const ui_page_t PAGES[NPAGES] = {
                                                   /* (app/usbaudio.c) */
     [PG_USBH] = {"USB HOST", UK_KNOBS, 0, PG_GLOBAL, {G(G_USB_HOST), PR_NONE, PR_NONE, PR_NONE}},   /* (app/usbhost.c) */
     /* the global effects (what a preset without its own group plays): REC, apart from GLO's settings (2026-10-24) */
-    [PG_G_LP] = {"BREATH LP", UK_KNOBS, 0, PG_G_DRIVE, {SG(S_LPF), SG(S_LPRES), SG(S_BR_LP), PR_NONE}},
+    /* (PG_G_LP, the global BREATH LP until 2026-10-28: no page now, its number kept) */
     [PG_G_DRIVE] = {"DRIVE", UK_KNOBS, 0, PG_G_DETUNE, {SG(S_DRIVE), SG(S_DRV_AT), PR_NONE, PR_NONE}},
     [PG_G_DETUNE] = {"DETUNE", UK_KNOBS, 0, PG_G_DELAY, {SG(S_DT_CENTS), SG(S_DT_DELAY), SG(S_DT_WIDTH), SG(S_DT_MIX)}},
     [PG_G_DELAY] = {"DELAY", UK_KNOBS, 0, PG_G_REVERB, {SG(S_DLY_TIME), SG(S_DLY_FB), SG(S_DLY_TONE), SG(S_DLY_MIX)}},
     [PG_G_REVERB] = {"REVERB", UK_KNOBS, 0, PG_G_REVERB2, {SG(S_REV_SIZE), SG(S_REV_DECAY), SG(S_REV_DAMP), SG(S_REV_MIX)}},
-    [PG_G_REVERB2] = {"REVERB +", UK_KNOBS, 0, PG_G_LP, {SG(S_REV_TYPE), SG(S_REV_PRE), PR_NONE, PR_NONE}},
+    [PG_G_REVERB2] = {"REVERB +", UK_KNOBS, 0, PG_G_DRIVE, {SG(S_REV_TYPE), SG(S_REV_PRE), PR_NONE, PR_NONE}},
 };
 
 /* the encoders that are not KNOB 1..4 (ENC_*) */
@@ -107,7 +110,7 @@ enum { UA_NONE, UA_PAGE, UA_XPOSE, UA_XPOSE_OCT, UA_MUTE, UA_SOLO, UA_SAVE, UA_S
 #define UI_NO BTN_OCT_DOWN
 #define UI_DELETE BTN_PLAY                         /* SAVE AS: the character before the cursor */
 static const struct { uint8_t btn, act, hold; uint8_t arg; int8_t step; } BUTTONS[] = {
-    {BTN_HOME, UA_PAGE, UA_GLOBAL, PG_BREATH, 0},
+    {BTN_HOME, UA_PAGE, UA_NONE, PG_BREATH, 0},     /* (the layer's breath: no sound group to hold back) */
     {BTN_ENV, UA_PAGE, UA_GLOBAL, PG_CURVE, 0},
     {BTN_EDIT, UA_PAGE, UA_NONE, PG_ENG1, 0},
     {BTN_FX, UA_PAGE, UA_GLOBAL, PG_DRIVE, 0},
@@ -118,7 +121,7 @@ static const struct { uint8_t btn, act, hold; uint8_t arg; int8_t step; } BUTTON
     {BTN_OCT_DOWN, UA_XPOSE, UA_XPOSE_OCT, 0, -1},   /* (a press: a semitone, when let go; a hold: an octave) */
     {BTN_OCT_UP, UA_XPOSE, UA_XPOSE_OCT, 0, 1},
     {BTN_PLAY, UA_MUTE, UA_SOLO, 0, 0},            /* (hold: solo; panic until 2026-10-24) */
-    {BTN_REC, UA_PAGE, UA_ALL_OFF, PG_G_LP, 0},     /* the global effects' pages, apart from GLO (hold: panic; SOLO until
+    {BTN_REC, UA_PAGE, UA_ALL_OFF, PG_G_DRIVE, 0},  /* the global effects' pages, apart from GLO (hold: panic; SOLO until
                                                      * 2026-10-24) */
     {BTN_SAVE, UA_SAVE, UA_SAVE_AS, 0, 0},
     {BTN_SEL, UA_NONE, UA_NONE, 0, 0},             /* (with OCT- / OCT+: octaves) */
@@ -127,7 +130,5 @@ static const struct { uint8_t btn, act, hold; uint8_t arg; int8_t step; } BUTTON
 
 /* MIDI CC -> parameter, over its whole range. CC2 (breath) and pitch bend are the performance's (app/app.c) */
 static const struct { uint8_t cc; pref_t r; } CC_MAP[] = {
-    {7, LN(0, P_LEVEL)},
-    {74, SP(S_LPF)},
-    {71, SP(S_LPRES)},
+    {7, LN(0, P_LEVEL)},                           /* (74 and 71 moved the mix's BREATH LP until 2026-10-28) */
 };

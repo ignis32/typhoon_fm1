@@ -34,7 +34,9 @@
 #define PS_HI_AT (17u * 0x1000u)                   /* slots 65 .. 96: sectors 17 .. 20 (after the BT stack's 16) */
 #define PS_HI_COPY ((NPRESET - PS_LO) / PS_PER_SEC * 0x1000u)   /* their copy right after (sectors 21 .. 24) */
 #define PS_MAGIC 0x31505254u                       /* "TRP1" */
-#define PS_VER 2u                                  /* 2: NEPAR engine values (1: 16, until 2026-10-28) */
+#define PS_VER 3u                                  /* 3: EDIT 5 (P_E16 ..) as saved; 2: NEPAR engine values, EDIT 5
+                                                    * meaning nothing yet; 1: 16 (until 2026-10-28). Below 3, EDIT 5
+                                                    * takes the engine's defaults (ps_edit5_defaults) */
 #define PS_NL 4u
 #define PS_NP 40u
 #define PS_NS 48u
@@ -235,7 +237,9 @@ static const factory_t FACTORY[] = {
     {"BARK TRUMPET", {ENG(0, ENG_ID_ERS, 9), PAR(0, P_E8, 40), PAR(0, P_E9, 70), PAR(0, P_E10, 110), PAR(0, P_E13, 76),
                       PAR(0, P_E14, 72), SND(S_VOLUME, 51), SND(S_REV_TYPE, 0), SND(S_REV_MIX, 24)}},
     /* 81 .. (2026-10-21): EVA's waves that breath plays */
-    {"EVA SYNC LEAD", {ENG(0, ENG_ID_EVA, 12), SND(S_VOLUME, 127), SND(S_REV_TYPE, 0), SND(S_REV_MIX, 22), SND(S_DLY_MIX, 18)}},
+    /* (S.E.D. 105, CUTOFF 63: as it played through the mix's breath LP until 2026-10-28, within 0.3 dB) */
+    {"EVA SYNC LEAD", {ENG(0, ENG_ID_EVA, 12), PAR(0, P_E2, 105), PAR(0, P_E3, 63), SND(S_VOLUME, 127), SND(S_REV_TYPE, 0),
+                       SND(S_REV_MIX, 22), SND(S_DLY_MIX, 18)}},
     {"EVA REEDY", {ENG(0, ENG_ID_EVA, 13), SND(S_VOLUME, 62), SND(S_REV_TYPE, 1), SND(S_REV_MIX, 28)}},
     {"EVA HARMONIC", {ENG(0, ENG_ID_EVA, 14), SND(S_VOLUME, 100), SND(S_REV_TYPE, 1), SND(S_REV_MIX, 38)}},
     {"EVA SUB BASS", {ENG(0, ENG_ID_EVA, 15), SND(S_VOLUME, 127), PAR(0, P_TRANS, -12), SND(S_REV_MIX, 8)}},
@@ -286,7 +290,7 @@ static uint32_t ps_crc(const uint8_t *p, uint32_t n)
 }
 static int ps_ok(const ps_rec_t *r)
 {
-    return r->magic == PS_MAGIC && (r->ver == 1u || r->ver == PS_VER) &&
+    return r->magic == PS_MAGIC && r->ver >= 1u && r->ver <= PS_VER &&
            r->crc == ps_crc((const uint8_t *)r + 8, PS_SLOT - 8u);
 }
 /* the engine values a record holds, its last ones: 16 in a version 1 record (until 2026-10-28), NEPAR from 2 */
@@ -368,6 +372,16 @@ static void factory_apply(uint32_t k)
     }
 }
 
+/* EDIT 5 (P_E16 ..) as layer l's engine has them by default: what a record or state from before EDIT 5 had a
+ * meaning plays there (version < 3: ERS's and FM's breath LP at the mix's old one, as they sounded) */
+static void ps_edit5_defaults(uint32_t l)
+{
+    const engine_t *e = layer_engine(l);
+    uint32_t k;
+    for (k = 16u; k < NEPAR; k++)
+        trk[l].p[P_E0 + k] = e->edit[k].def;
+}
+
 static void ps_apply(const ps_rec_t *r)
 {
     uint32_t l, i, ne = ps_nepar(r), nc = r->np > ne ? r->np - ne : 0;
@@ -377,6 +391,8 @@ static void ps_apply(const ps_rec_t *r)
             trk[l].p[i] = r->p[l][i];
         for (i = 0; i < ne && i < NEPAR && nc + i < r->np && nc + i < PS_NP; i++)
             trk[l].p[P_E0 + i] = r->p[l][nc + i];
+        if (r->ver < 3u)
+            ps_edit5_defaults(l);
     }
     for (i = 0; i < S_COUNT; i++)
         sown[i] = i < r->ns && i < PS_NS ? r->s[i] : sglob[i];
@@ -478,8 +494,11 @@ static int ps_save(uint32_t k)
 /* ---- the state in the settings sector (<= 512 bytes). With room to grow: the counts it was saved with say what is
  * there, and are read by them as the presets are (layers: the commons, then the NEPAR engine values; S_* and G_* by
  * index): a new parameter (just before P_E0, or at the end of S_* / G_*) takes its default, nothing is lost */
-#define STATE_MAGIC 0x7A09u                        /* change it only when the layout below changes (0x7A09: NEPAR engine
-                                                    * values; 0x7A08, until 2026-10-28, held 16: still read) */
+#define STATE_MAGIC 0x7A0Au                        /* change it only when the layout below changes (0x7A0A: EDIT 5 as
+                                                    * saved; 0x7A09: NEPAR engine values, EDIT 5 meaning nothing yet;
+                                                    * 0x7A08, until 2026-10-28, 16: both still read, EDIT 5 then the
+                                                    * engine's defaults) */
+#define STATE_MAGIC_20 0x7A09u
 #define STATE_MAGIC_16 0x7A08u
 #define P_SAVED 40u
 #define S_SAVED 32u
@@ -505,8 +524,8 @@ static void state_load(void)
     if (settings_load(&s, sizeof s))
         s.magic = 0;
     ne = s.magic == STATE_MAGIC_16 ? 16u : NEPAR;  /* the engine values it holds */
-    if ((s.magic != STATE_MAGIC && s.magic != STATE_MAGIC_16) || s.ng > G_SAVED || s.ns > S_SAVED || s.np < ne ||
-        s.np > P_SAVED || s.nl != NLAYER) {
+    if ((s.magic != STATE_MAGIC && s.magic != STATE_MAGIC_20 && s.magic != STATE_MAGIC_16) || s.ng > G_SAVED ||
+        s.ns > S_SAVED || s.np < ne || s.np > P_SAVED || s.nl != NLAYER) {
         ps_load(0);                                /* nothing saved, or a layout we do not know: the first preset */
         return;
     }
@@ -522,6 +541,8 @@ static void state_load(void)
             trk[n].p[i] = s.p[n][i];               /* (an engine this build lacks: layers.c plays ENGINES[0]) */
         for (i = 0; i < ne; i++)
             trk[n].p[P_E0 + i] = s.p[n][nc + i];
+        if (s.magic != STATE_MAGIC)
+            ps_edit5_defaults(n);
     }
     s_own = (uint8_t)(s.own & ((1u << NGROUP) - 1u));
     ps.cur = (uint8_t)(s.cur % NPRESET);

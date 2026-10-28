@@ -14,10 +14,11 @@
 static const char *const N_FM_RATIO[] = {"0.5", "1", "1.5", "2", "3", "4", "5", "7"};
 static const uint16_t FM_RATIO_Q8[8] = {128, 256, 384, 512, 768, 1024, 1280, 1792};
 
+/* (EDIT 5, the breath LP, at the mix's old one: LP CUT 60, LP RES 20, BR>LP +40) */
 static const preset_t FM_PRESETS[] = {
-    {"BRASS", {40, 1, 10, 0, 10, 40, 0, 0}, {0, 0, 127, 20}, 0, 1, {0}, 0},
-    {"REED", {30, 3, 30, 0, 20, 20, 0, 0}, {0, 0, 127, 20}, 0, 1, {0}, 0},
-    {"BELL", {50, 6, 0, 6, 0, 60, 0, 0}, {0, 0, 127, 40}, 0, 1, {0}, 0},
+    {"BRASS", {40, 1, 10, 0, 10, 40, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 60, 20, 40}, {0, 0, 127, 20}, 0, 1, {0}, 0},
+    {"REED", {30, 3, 30, 0, 20, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 60, 20, 40}, {0, 0, 127, 20}, 0, 1, {0}, 0},
+    {"BELL", {50, 6, 0, 6, 0, 60, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 60, 20, 40}, {0, 0, 127, 40}, 0, 1, {0}, 0},
 };
 
 static void fm_note_on(track_t *t, voice_t *v)
@@ -56,7 +57,7 @@ static void fm_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const vm
 
 static const engine_t ENG_FM = {
     .name = "FM",
-    .page_title = {"FM", "FM +"},
+    .page_title = {"FM", "FM +", 0, 0, "BREATH LP"},
     .edit = {
         {"INDEX", F_PCT, 0, 127, 40, 0, 0},
         {"RATIO", F_ENUM, 0, 7, 1, N_FM_RATIO, 0},
@@ -65,11 +66,13 @@ static const engine_t ENG_FM = {
         {"AIR", F_PCT, 0, 127, 10, 0, 0},
         {"KEYTRK", F_PCT, 0, 127, 40, 0, 0},
         {"-", F_INT, 0, 0, 0, 0, 0}, {"-", F_INT, 0, 0, 0, 0, 0},
+        [16] = BLP_KNOBS,                              /* EDIT 5: the breath LP (dsp/breathlp.c; the mix's until 2026-10-28) */
     },
     .presets = FM_PRESETS,
     .npresets = NELEM(FM_PRESETS),
     .knob = {0, 1, 2, 4},
     .keep = 0x04u,                                     /* s[2], the index now: no jump on a retrigger */
+    .blp = 17,                                         /* (EDIT 16 .. 18) */
     .note_on = fm_note_on,
     .render = fm_render,
 };

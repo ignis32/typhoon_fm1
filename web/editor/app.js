@@ -308,7 +308,9 @@ function markOff(n) {
 function buildGroups() {
   const box = $('groups');
   forgetCtls(box);
-  const groups = [...new Set(ed.soundHandles().map((h) => ed.d(h)?.group).filter((g) => g !== null && g !== undefined))];
+  // (a group with no live knob is left out: BREATH LP, retired 2026-10-28, its three kept in S_* as nothing)
+  const live = (h) => ed.d(h)?.max > ed.d(h)?.min;
+  const groups = [...new Set(ed.soundHandles().filter(live).map((h) => ed.d(h)?.group).filter((g) => g !== null && g !== undefined))];
   const rank = (g) => { const i = GROUP_ORDER.indexOf(TSX.groupName(g)); return i < 0 ? 100 + g : i; };
   groups.sort((a, b) => rank(a) - rank(b));
   box.replaceChildren(...groups.map((g) => el('section', { class: 'card group', id: `group-${g}` })));

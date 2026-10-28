@@ -2,7 +2,8 @@
 /* Copyright (C) 2026 ignis32 */
 /* The sound after the layers are mixed (core/layers.c layers_audio: once a control block, CTL frames, both sides):
  *   drive    past the breath S_DRV_AT the mix is driven into a soft clipper (S_DRIVE), faded in from there
- *   LP       a low-pass that breath opens: S_LPF at no breath, + breath x S_BR_LP; resonance S_LPRES
+ *   (LP      the low-pass breath opened, S_LPF / S_LPRES / S_BR_LP, until 2026-10-28: now each engine's own, ERS's
+ *            and FM's EDIT 5, dsp/breathlp.c; the three stay in S_* as nothing, the saved sounds' order kept)
  *   detune   a copy a few cents up and one down, a little late, spread left / right (a doubler, micro-pitch)
  *   delay    mono, up to ~1 s, its feedback low-passed (S_DLY_TONE); the echoes onto both sides
  *   reverb   PLATE / HALL / OLD (core/reverb.c)
@@ -14,8 +15,7 @@
 static int16_t dly_buf[DLY_MAX] __attribute__((section(".pool")));
 
 static struct {
-    int32_t lp1[2], lp2[2];                        /* the LP, each side */
-    uint8_t dly_on, dt_on, lp_on;                  /* (lp_on: the LP below its top, filtering: last block) */
+    uint8_t dly_on, dt_on;
     uint32_t dt_w, dt_ph;                          /* detune: the write index, the windows' phase */
     uint32_t dly_w;
     int32_t dly_len, dly_lp;                       /* the delay in samples (slews to the set time), its feedback LP */
@@ -48,40 +48,6 @@ static void fx_drive(int32_t *l, int32_t *r, int32_t breath)
     }
 }
 
-static void fx_lp(int32_t *l, int32_t *r, int32_t breath)
-{
-    int32_t cut = (sv(S_LPF) << 8) + ((breath * sv(S_BR_LP)) >> 6);
-    tsvf_t c;
-    int32_t any = 0, j, on;
-    uint32_t i;
-    for (i = 0; i < CTL; i++)
-        any |= l[i] | r[i];
-    for (j = 0; j < 2; j++)                        /* (an integer filter fed silence can hold a few LSB forever) */
-        if (fx.lp1[j] > 256 || fx.lp1[j] < -256 || fx.lp2[j] > 256 || fx.lp2[j] < -256)
-            any = 1;
-    if (!any) {                                    /* silence in and nothing left: nothing to do */
-        fx.lp1[0] = fx.lp2[0] = fx.lp1[1] = fx.lp2[1] = 0;
-        fx.lp_on = 0;
-        return;
-    }
-    /* open (past ~84 % breath): the sound passes as it is, but the filter runs on at its top, so it is in step when
-     * breath falls back (started from an empty state it clicked, until 2026-10-23); in or out, the
-     * block blends from one to the other (no step of the filter's own small delay either) */
-    tsvf_coef(&c, clamp(cut, 0, 127 << 8), sv(S_LPRES));
-    on = cut < (127 << 8);
-    for (i = 0; i < CTL; i++) {
-        int32_t yl = tsvf_lp(&c, l[i], &fx.lp1[0], &fx.lp2[0]), yr = tsvf_lp(&c, r[i], &fx.lp1[1], &fx.lp2[1]);
-        if (on != fx.lp_on) {
-            int32_t g = on ? (int32_t)i + 1 : CTL - 1 - (int32_t)i;   /* (of CTL: the filtered one's share) */
-            l[i] += ((yl - l[i]) * g) >> CTL_LOG2;
-            r[i] += ((yr - r[i]) * g) >> CTL_LOG2;
-        } else if (on) {
-            l[i] = yl;
-            r[i] = yr;
-        }
-    }
-    fx.lp_on = (uint8_t)on;
-}
 
 static void fx_delay(int32_t *l, int32_t *r)
 {
@@ -185,7 +151,6 @@ static void fx_volume(int32_t *l, int32_t *r)
 static void fx_block(int32_t *l, int32_t *r, int32_t breath)
 {
     fx_drive(l, r, breath);
-    fx_lp(l, r, breath);
     fx_detune(l, r);
     fx_delay(l, r);
     fx_reverb(l, r);

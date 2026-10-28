@@ -31,7 +31,7 @@ export default async function (t) {
   const before = values();
   await ed.save(59, 'REC V2');
   const v2 = await ed.read(59);
-  check(v2[8] === 2 && v2[10] === C.P_COUNT && C.P_COUNT === C.P_E0 + 20,
+  check(v2[8] === 3 && v2[10] === C.P_COUNT && C.P_COUNT === C.P_E0 + 20,
     `records: saved as version ${v2[8]}, ${v2[10]} values a layer (${C.P_E0} commons, 20 engine knobs)`);
 
   // the version 1 layout: the commons, then P_E0 .. P_E15 only; np = P_E0 + 16
@@ -55,5 +55,8 @@ export default async function (t) {
       if (before[l * C.P_COUNT + i] !== after[l * C.P_COUNT + i]) diff.push(`L${l + 1}:${i} ${before[l * C.P_COUNT + i]}->${after[l * C.P_COUNT + i]}`);
   check(back[8] === 1 && diff.length === 0,
     `records: a version 1 record (16 engine knobs) loads as it was saved, every common and P_E0 .. P_E15${diff.length ? ` (${diff.slice(0, 6).join(', ')})` : ''}`);
+  // EDIT 5 from before it meant anything: the engine's defaults (ERS: its breath LP at the mix's old one, 60 20 +40)
+  const e5 = [0, 1].map((l) => [16, 17, 18].map((k) => ex.sim_par_get(t.LN(l, C.P_E0 + k))).join(' '));
+  check(e5.every((s) => s === '60 20 40'), `records: a version 1 record's ERS layers get their breath LP at the mix's old one (${e5.join(' / ')})`);
   link.close();
 }

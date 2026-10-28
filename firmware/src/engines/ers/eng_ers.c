@@ -9,8 +9,10 @@
 #include "ers_resonators.c"
 #include "ers_shapers.c"
 
-#define EP(n, b, x, c, r, d, br, s, a) {n, {b, x, c, r, d, br, s, a, 0, 64, 0, 0, 64, 64, 64, 0}, {0, 0, 127, 25}, 0, 1, {0}, 0}
-/* (EDIT 3 / 4 at their defaults: VIB 0, RATE 64, TONGUE 0, -, AIR 64, TILT 64, PR>PITCH 64, DRIFT 0) */
+#define EP(n, b, x, c, r, d, br, s, a) {n, {b, x, c, r, d, br, s, a, 0, 64, 0, 0, 64, 64, 64, 0, 60, 20, 40, 0}, \
+                                        {0, 0, 127, 25}, 0, 1, {0}, 0}
+/* (EDIT 3 / 4 at their defaults: VIB 0, RATE 64, TONGUE 0, -, AIR 64, TILT 64, PR>PITCH 64, DRIFT 0; EDIT 5, the breath
+ * LP, at the mix's old one: LP CUT 60, LP RES 20, BR>LP +40) */
 static const preset_t ERS_PRESETS[] = {
     /*  name          BLOW EXCITER    COLOR RESONATOR  DECAY BRIGHT SHAPER    AMOUNT */
     EP("FLUTE",       0, EX_NOISE,   30, RS_TUBE,    50, 70, SH_BYPASS,  0),
@@ -241,7 +243,7 @@ static const param_desc_t *ers_desc(const track_t *t, uint32_t k)
 
 static const engine_t ENG_ERS = {
     .name = "ERS",
-    .page_title = {"ERS", "ERS +", "ERS PLAY", "ERS AIR"},
+    .page_title = {"ERS", "ERS +", "ERS PLAY", "ERS AIR", "BREATH LP"},
     .edit = {
         {"BLOW", F_PCT, 0, 127, 0, 0, 0},
         {"EXCITER", F_ENUM, 0, ERS_NEXC - 1, EX_NOISE, ERS_N_EXC, 0},
@@ -259,11 +261,13 @@ static const engine_t ENG_ERS = {
         {"TILT", F_PCT, 0, 127, 64, 0, 0},
         {"PR>PITCH", F_PCT, 0, 127, 64, 0, 0},
         {"DRIFT", F_PCT, 0, 127, 0, 0, 0},
+        BLP_KNOBS,                             /* EDIT 5: the breath LP (dsp/breathlp.c; the mix's until 2026-10-28) */
     },
     .presets = ERS_PRESETS,
     .npresets = NELEM(ERS_PRESETS),
     .knob = {0, 2, 4, 7},
     .keep = 0x80u,                                 /* s[7]: the lines are this layer's */
+    .blp = 17,                                     /* (EDIT 16 .. 18) */
     .block = ers_block,
     .note_on = ers_note_on,
     .render = ers_render,

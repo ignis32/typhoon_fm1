@@ -11,7 +11,7 @@ export default function (t) {
   const rms = (b) => Math.sqrt(b.reduce((a, v) => a + v * v, 0) / b.length);
   const bright = (b) => { let d = 0; for (let i = 1; i < b.length; i++) d += (b[i] - b[i - 1]) ** 2; return Math.sqrt(d / b.length) / (rms(b) || 1); };
   const fresh = (type, a, b, c) => {
-    ex.sim_preset(255); ex.sim_par_set(SG(C.S_REV_MIX), 0); ex.sim_par_set(SG(C.S_LPF), 127);   // (the mix's LP open)
+    ex.sim_preset(255); ex.sim_par_set(SG(C.S_REV_MIX), 0);   // (ANALOG: no breath LP of its own; the mix's until 2026-10-28)
     ex.sim_par_set(L1(C.P_ENGINE), analog);
     ex.sim_par_set(L1(C.P_TONE), type);
     if (a !== undefined) ex.sim_par_set(L1(C.P_TONE_A), a);
@@ -21,15 +21,15 @@ export default function (t) {
   const hold = (breath = 100, ms = 400) => { ex.sim_midi(0xB0, 2, breath); ex.sim_midi(0x90, 57, 80); run(ms); return grab(300); };
   const quiet = () => { t.off(57, 1500); return run(200) < 1e-3; };
 
-  // the page: EDIT, EDIT, EDIT; a type's knobs start at its defaults
+  // the page: EDIT x 4 (INIT's FM: FM, FM +, its BREATH LP on EDIT 5, then TONE); a type's knobs start at its defaults
   ex.sim_preset(255);
-  t.press(C.BTN_EDIT); t.press(C.BTN_EDIT); t.press(C.BTN_EDIT);
+  t.press(C.BTN_EDIT); t.press(C.BTN_EDIT); t.press(C.BTN_EDIT); t.press(C.BTN_EDIT);
   const page = ex.sim_page_cur();
   ex.sim_par_set(L1(C.P_TONE), C.TN_FILTER);
   const a = ex.sim_par_get(L1(C.P_TONE_A)), mode = ex.sim_par_get(L1(C.P_TONE_C));
   ex.sim_par_set(L1(C.P_TONE), C.TN_SUB);
   const lev = ex.sim_par_get(L1(C.P_TONE_A));
-  check(page === C.PG_TONE && a === 80 && mode === 0 && lev === 70, `TONE: EDIT's third page (${page}), FILTER starts at CUTOFF 80 / LP, SUB OCT at LEVEL 70`);
+  check(page === C.PG_TONE && a === 80 && mode === 0 && lev === 70, `TONE: EDIT's fourth page on FM (${page}), FILTER starts at CUTOFF 80 / LP, SUB OCT at LEVEL 70`);
 
   // OFF leaves the engine as it is; FILTER LP darkens, HP takes the fundamental (most of a saw's level) away
   fresh(C.TN_OFF); const off = hold(); const ok0 = quiet();

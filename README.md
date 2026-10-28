@@ -62,15 +62,15 @@ the page's button gives it back to the global one.
 | SELECT encoder | the layer 1-2-3 |
 | ALGORITHM encoder | the layer's engine (the last place: OFF) |
 | KNOB 1-4 | the page's four values |
-| HOME | BREATH LP (cutoff, resonance, breath amount) · hold: back to global |
+| HOME | BREATH: how the layer follows breath (BR>AMP, BR>TONE, BR>SHP). ERS's and FM's breath LP (cutoff, resonance, breath amount) is their EDIT 5 |
 | ENV | breath CURVE · hold: back to global |
-| EDIT | the engine's knobs → its second page → TONE (after the engine: OFF, FILTER LP/BP/HP, SWEEP, TALK, SUB OCT) |
+| EDIT | the engine's knobs, page by page (EDIT 1 .. 5, the empty ones passed by) → TONE (after the engine: OFF, FILTER LP/BP/HP, SWEEP, TALK, SUB OCT) |
 | FX | DRIVE → DETUNE → DELAY → REVERB → REVERB + (TYPE: PLATE / HALL, PRE-DLY), again and again · hold: back to global |
 | LFO | ENVELOPE (per layer, drawn): ATTACK, DECAY, SUSTAIN, RELEASE → ENVELOPE + (DELAY, BR>AMP). Restarts on a fresh attack, legato runs on |
-| ARP | LAYER (engine, level, transpose, pan) → BREATH (breath → tone / shape, filter type, fine) |
+| ARP | LAYER (engine, level, transpose, pan) → LAYER + (breath → tone / shape, filter type, fine) |
 | SEQ | MIX: the 3 levels, each with its engine, and the preset's VOLUME (KNOB 4: the whole sound, effects too; 100 = as it is) · hold: VOLUME back to global |
 | GLO | the global settings: GLOBAL (breath source, bend, transpose) → BLUETOOTH (BLE-P, BLE-C, the list, AUTO_RECONNECT) → TILT>BEND → BREATH IN (BREATH CC, LOUDNESS) → CURVE (the global breath curve) → LEAPS → USB AUDIO → USB HOST · hold: GLOBAL TO FACTORY ? |
-| REC | the global effects: BREATH LP → DRIVE → DETUNE → DELAY → REVERB → REVERB + (what a preset without its own group plays) · hold: all notes off |
+| REC | the global effects: DRIVE → DETUNE → DELAY → REVERB → REVERB + (what a preset without its own group plays) · hold: all notes off |
 | OCT− / OCT+ | press: transpose a semitone (when let go) · hold: an octave (or SEL + press) · both: 0. Cuts the sounding note |
 | PLAY | mute the layer · hold: solo it (again: back; PLAY blinks meanwhile) |
 | SAVE | SAVE TO nn ? (PRESETS picks the slot) · hold: SAVE AS (the keys type the name — a legend on screen — PLAY deletes, SELECT the cursor, ALGORITHM 0-9 - . /, PRESETS the slot; only OCT+ saves, OCT- cancels) |

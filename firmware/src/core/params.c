@@ -64,9 +64,10 @@ static const param_desc_t SOUND[S_COUNT] = {
                                                            * start: a held note sounds before any breath */
     [S_BC_HI] = {"HIGH", F_INT, 1, 127, 120, 0, 0},
     [S_BC_SHAPE] = {"SHAPE", F_INT, -64, 63, 0, 0, 0},
-    [S_LPF] = {"LP CUT", F_CUTOFF, 0, 127, 60, 0, 0},
-    [S_LPRES] = {"LP RES", F_PCT, 0, 127, 20, 0, 0},
-    [S_BR_LP] = {"BR>LP", F_BIPCT, -64, 63, 40, 0, 0},
+    [S_LPF] = {"-", F_INT, 0, 0, 0, 0, 0},             /* (S_LPF, S_LPRES, S_BR_LP: the mix's breath LP until 2026-10-28,
+                                                         * now ERS's and FM's own, EDIT 5: nothing, kept in place) */
+    [S_LPRES] = {"-", F_INT, 0, 0, 0, 0, 0},
+    [S_BR_LP] = {"-", F_INT, 0, 0, 0, 0, 0},
     [S_DRIVE] = {"DRIVE", F_PCT, 0, 127, 0, 0, 0},
     [S_DRV_AT] = {"DRV AT", F_PCT, 0, 127, 96, 0, 0},
     [S_DLY_TIME] = {"TIME", F_TIME, 64, 125, 100, 0, 0},   /* 30 ms .. ~1 s */

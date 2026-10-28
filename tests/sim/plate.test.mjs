@@ -13,10 +13,10 @@ export default function (t) {
   const fresh = (type, s, noise = true) => {        // a firmware: INIT, the reverb so (s: SIZE/DECAY/DAMP/PRE/MIX)
     const f = boot(undefined, true), { ex } = f;
     ex.sim_preset(255);
-    if (noise) {                                    // (the NOISE engine until 2026-10-28: now EVA's NS_WHITE, open)
-      ex.sim_par_set(LN(0, C.P_ENGINE), f.engine(C.ENG_ID_EVA));
-      ex.sim_par_set(LN(0, C.P_E0 + 1), 11);        // WAVE NS_WHITE
-      ex.sim_par_set(LN(0, C.P_E0 + 3), 127);       // CUTOFF
+    if (noise) {                                    // white noise through a low-pass near 13 kHz at breath 100: the
+      ex.sim_par_set(LN(0, C.P_ENGINE), f.engine(C.ENG_ID_EVA));   // NOISE engine through the mix's LP until
+      ex.sim_par_set(LN(0, C.P_E0 + 1), 11);        // 2026-10-28, now EVA: WAVE NS_WHITE, its LP2 at CUTOFF 112
+      ex.sim_par_set(LN(0, C.P_E0 + 3), 112);       // (RT60 measures the burst's spectrum too: the same one)
       ex.sim_par_set(LN(0, C.P_E0 + 6), 0);         // VIB
     }
     for (const g of [SP, SG]) {

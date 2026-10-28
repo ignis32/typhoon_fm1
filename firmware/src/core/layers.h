@@ -53,7 +53,8 @@ enum {
     S_BC_LO, S_BC_HI,                /* GR_CURVE: CC2 below LO counts as nothing, from HI on as full; LO below 0: a head start */
     S_BC_SHAPE,                      /*   and between: -64 log (fast at first) .. 0 linear .. 63 exponential */
                                      /*   (S_BSMOOTH was here until 2026-10-23: now G_BSMOOTH, global only) */
-    S_LPF, S_LPRES, S_BR_LP,         /* GR_LP: the low-pass on the mix: cutoff at no breath, resonance, breath opens it */
+    S_LPF, S_LPRES, S_BR_LP,         /* GR_LP: nothing since 2026-10-28 (the mix's breath LP, now ERS's and FM's own:
+                                      * dsp/breathlp.c); kept, so the saved sounds' S_* after them stay in place */
     S_DRIVE, S_DRV_AT,               /* GR_DRIVE: overdrive by breath: amount (0 = off), the breath where it starts */
     S_DLY_TIME, S_DLY_FB, S_DLY_TONE, S_DLY_MIX,     /* GR_DELAY */
     S_REV_SIZE, S_REV_DECAY, S_REV_DAMP, S_REV_MIX,  /* GR_REVERB */

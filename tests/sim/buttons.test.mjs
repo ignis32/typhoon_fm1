@@ -12,8 +12,8 @@ export default function (t) {
   const wantGlo = [C.PG_GLOBAL, C.PG_BT, C.PG_TILT, C.PG_G_BREATH, C.PG_G_CURVE, C.PG_LEAP, C.PG_USB, C.PG_USBH, C.PG_GLOBAL];
   check(glo.join() === wantGlo.join(), `GLO: the global settings and the breath curve, round (${glo.map(name).join(' ')})`);
 
-  const rec = cycle(C.BTN_REC, 7);
-  const wantRec = [C.PG_G_LP, C.PG_G_DRIVE, C.PG_G_DETUNE, C.PG_G_DELAY, C.PG_G_REVERB, C.PG_G_REVERB2, C.PG_G_LP];
+  const rec = cycle(C.BTN_REC, 6);                // (BREATH LP first until 2026-10-28: now ERS's and FM's EDIT 5)
+  const wantRec = [C.PG_G_DRIVE, C.PG_G_DETUNE, C.PG_G_DELAY, C.PG_G_REVERB, C.PG_G_REVERB2, C.PG_G_DRIVE];
   check(rec.join() === wantRec.join(), `REC: the global effects' pages, round (${rec.map(name).join(' ')})`);
 
   const muted = () => [0, 1, 2].map((l) => ex.sim_par_get(LN(l, C.P_MUTE)));

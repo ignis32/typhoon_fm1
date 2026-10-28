@@ -72,6 +72,7 @@ static struct {
     uint8_t cut;                                   /* fading out fast (perf_cut) */
     env_t env;                                     /* the volume envelope */
     int32_t amp;                                   /* loudness now, Q15 */
+    blp_t blp;                                     /* the engine's breath LP (engine_t.blp; dsp/breathlp.c) */
 } lay[NLAYER];
 
 /* a breath curve: CC2 as Q15 in, Q15 out, for LOW, HIGH (0..127), SHAPE (-64..63) (also the UI's picture of it) */
@@ -375,6 +376,8 @@ static void layers_block(int32_t *outl, int32_t *outr)
         perf_ui.amp[l] = m.amp1;
         memset(buf, 0, sizeof buf);
         e->render(t, v, buf, CTL, &m);
+        if (e->blp)                                /* the engine's breath LP, on its knobs (dsp/breathlp.c) */
+            blp_block(&lay[l].blp, buf, p[P_E0 + e->blp - 1u], p[P_E0 + e->blp], p[P_E0 + e->blp + 1u], pf.breath);
         tone_block(l, buf, CTL, p, &m, pf.breath);   /* the TONE stage (core/tone.c) */
         {                                          /* level and pan (centre: both sides at the level) */
             int32_t gl = (64 - pan) * lev, gr = (64 + pan) * lev;     /* / (64 * 127) */

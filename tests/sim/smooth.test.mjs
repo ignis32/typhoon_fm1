@@ -16,8 +16,9 @@ export default function (t) {
   const rise = (set) => {                           // ms to 90 % of the level reached after 300 ms
     ex.sim_preset(255);
     ex.sim_par_set(SG(C.S_REV_MIX), 0); ex.sim_par_set(SG(C.S_DLY_MIX), 0);
-    ex.sim_par_set(SG(C.S_LPF), 127);               // (the mix's breath LP open: it is not what is measured)
     set();
+    ex.sim_par_set(t.L1(C.P_E0 + 16), 127);         // (an ERS / FM layer's breath LP open, EDIT 5's LP CUT: it is not
+                                                    // what is measured; the mix's until 2026-10-28)
     ex.sim_midi(0xB0, 2, 0); ex.sim_midi(0x90, 69, 80); run(400);
     ex.sim_midi(0xB0, 2, 127);
     const e = env(400), fin = e.slice(300).reduce((s, v) => s + v, 0) / 100;
