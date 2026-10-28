@@ -4,6 +4,8 @@
  *   CPU AVERAGE    fm1-base's load, over ~16 blocks (90 ms)
  *   WORST, 1 S     the slowest single block in the last second (the render alone): what the average hides
  *   WORST          the slowest since the reset
+ *   CORE 2         the second core's load / its worst block a second (core/cpumeter.c cpu2_job), or why none: NOT IN
+ *                  BUILD (fm1.toml cpu2), OFF (not started or given up), ON, NO JOBS
  *   XRUNS          blocks not done in time since the reset (a dropout: a click), and when the last one came
  * Each load as % of the block's time with a bar, red from 90 % (past 100 %: an xrun). KNOB 1 (a turn) resets the
  * worst and the xruns. Redrawn ~5 times a second. Part of ui/ui.c (included there, with its drawing helpers). */
@@ -36,10 +38,28 @@ static void draw_perf(void)
     perf_row(2, "CPU AVERAGE", plat_cpu_pct() * 10u, 1);
     perf_row(30, "WORST BLOCK, 1 S", cpum.sec_shown, 1);
     perf_row(58, "WORST BLOCK", cpum.peak, 0);
-    cv_text(6, 82, &FONT_S, "XRUNS", C_GRAY);
+    cv_text(6, 78, &FONT_S, "CORE 2", C_GRAY);   /* its load and worst a second, or why it has none */
+    switch (cpum_c2_state()) {
+    case 0: put_str(s, "NOT IN BUILD"); break;
+    case 1: put_str(s, "OFF"); break;
+    case 2: put_str(s, "ON, NO JOBS"); break;
+    default: {
+        const uint32_t avg = (cpum.c2_q12 * 1000u + 2048u) >> 12, w = cpum.c2_shown;   /* (% x 10) */
+        e = put_int(s, (int32_t)(avg / 10u), 0);
+        *e++ = '.';
+        e = put_int(e, (int32_t)(avg % 10u), 0);
+        put_str(e, " % / ");
+        e = put_int(s + par_strlen(s), (int32_t)(w / 10u), 0);
+        *e++ = '.';
+        e = put_int(e, (int32_t)(w % 10u), 0);
+        put_str(e, " %");
+    }
+    }
+    cv_text(234 - text_w(&FONT_S, s), 78, &FONT_S, s, cpum_c2_state() == 3 && cpum.c2_shown >= PERF_HOT ? PERF_RED : C_AMB);
+    cv_text(6, 98, &FONT_S, "XRUNS", C_GRAY);
     put_int(s, (int32_t)xr, 0);
-    cv_text(234 - text_w(&FONT_S, s), 82, &FONT_S, s, xr ? PERF_RED : C_AMB);
-    cv_text(6, 102, &FONT_S, "LAST XRUN", C_GRAY);
+    cv_text(234 - text_w(&FONT_S, s), 98, &FONT_S, s, xr ? PERF_RED : C_AMB);
+    cv_text(6, 118, &FONT_S, "LAST XRUN", C_GRAY);
     if (!cpum.t_xrun)
         put_str(s, "NONE");
     else {
@@ -47,10 +67,10 @@ static void draw_perf(void)
         e = put_int(s, (int32_t)(ago < 60u ? ago : ago / 60u), 0);
         put_str(e, ago < 60u ? " S AGO" : " MIN AGO");
     }
-    cv_text(234 - text_w(&FONT_S, s), 102, &FONT_S, s, cpum.t_xrun && ms_since(cpum.t_xrun) < 2000u ? PERF_RED : C_AMB);
-    cv_rect(0, 126, 240, 1, C_LINE);
-    cv_text(6, 134, &FONT_S, "1", C_DIM);
-    cv_text(22, 134, &FONT_S, "TURN: RESET WORST, XRUNS", C_GRAY);
+    cv_text(234 - text_w(&FONT_S, s), 118, &FONT_S, s, cpum.t_xrun && ms_since(cpum.t_xrun) < 2000u ? PERF_RED : C_AMB);
+    cv_rect(0, 140, 240, 1, C_LINE);
+    cv_text(6, 146, &FONT_S, "1", C_DIM);
+    cv_text(22, 146, &FONT_S, "TURN: RESET WORST, XRUNS", C_GRAY);
     put_str(s, "A BLOCK: ");                       /* "A BLOCK: 256 FRAMES, 5.8 MS" */
     e = put_int(s + par_strlen(s), (int32_t)cpum.n, 0);
     put_str(e, " FRAMES, ");
@@ -58,7 +78,7 @@ static void draw_perf(void)
     *e++ = '.';
     e = put_int(e, (int32_t)(cpum.n * 10000u / FS) % 10, 0);
     put_str(e, " MS");
-    cv_text(6, 156, &FONT_S, s, C_DIM);
+    cv_text(6, 164, &FONT_S, s, C_DIM);
     cv_blit(0, 58 + tp_box.top);
     }
 }
