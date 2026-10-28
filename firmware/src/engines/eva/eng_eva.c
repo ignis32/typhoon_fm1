@@ -184,7 +184,9 @@ static const float EVA_SPREAD[6] = {-1.f, -0.62f, -0.3f, 0.29f, 0.6f, 0.98f};   
 #define EVA_FMT_K 0.12f                            /* the formant's band-passes: damping 0.12 (Q ~8) */
 #define EVA_FMT_F2 0.7f                            /* the second formant -3 dB, as in a voice */
 #define EVA_FMT_GAIN 2.5f                          /* their sum made up to the dry's level */
-#define EVA_OUT_LVL 24576.f                        /* the output, the other engines' level (dsp.c VOICE_FS's scale) */
+#define EVA_OUT_LVL 24576.f                        /* float -> the layer's integers: the one handoff (nothing after the
+                                                    * engines is float). 24576, ~0.2 dB over dsp.c's VOICE_FS 24000,
+                                                    * kept: the presets' levels were set on it */
 #define EVA_OUT_CLIP 1.5f                          /* clipped past 1.5 (a resonant peak's ceiling) */
 /* (the humanise, a random pitch / cutoff / level on each tongued note, 15 % fixed and hidden: gone 2026-10-28; each
  * fingering's own fixed offsets are the layer's QUIRKS now, core/layers.c) */
