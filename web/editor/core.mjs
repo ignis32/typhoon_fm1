@@ -506,9 +506,11 @@ export class Editor {
     const recOf = async (k) => {
       const r = await this.read(k);
       if (r) return r;
+      const init = empty(k);                       // (an empty slot: INIT plays there)
       await this.load(k);
       loaded.any = true;
       await this.save(k, null);
+      if (init) await this.rename(k, 'INIT');      // (the FM-1 names a saved INIT "PRESET nn": here it is INIT moved)
       return this.read(k);
     };
     const ea = empty(a), eb = empty(b), ra = await recOf(a), rb = await recOf(b);

@@ -230,14 +230,18 @@ export default async function (t) {
   await ed.swap(9, 30);
   check(TSX.hex(await ed.read(9)) === TSX.hex(s30) && TSX.hex(await ed.read(30)) === TSX.hex(s9) && ed.state.slot === 30 &&
     t.name(30) === 'RENAMED 1', 'webeditor SWAP: user slots 10 and 31 trade records; RENAMED 1 plays on, from 31');
-  const fk = 70, fn = t.name(fk), un = t.name(9);
+  const fk = 15, fn = t.name(fk), un = t.name(9);
   const fkFactory = ed.kind(fk) === 'factory';
   await ed.swap(fk, 9);
   check(fkFactory && t.name(9) === fn && t.name(fk) === un && ex.sim_preset_user(9) && ex.sim_preset_user(fk) && ed.state.slot === 30,
     `webeditor SWAP: factory slot ${fk + 1} (${fn}) and user slot 10 (${un}); what played (31) loaded again`);
   const e1 = 94, e2 = 95, emptyOk = ed.kind(e1) === 'empty' && ed.kind(e2) === 'empty';
-  await ed.swap(50, e1);
-  check(emptyOk && t.name(e1) === 'RENAMED 1' && ex.sim_preset_user(50), `webeditor SWAP: user slot 51 into empty ${e1 + 1}; 51 holds INIT`);
+  await ed.swap(50, e1);                            // (51 is past the factory slots: the INIT that comes back is no record)
+  check(emptyOk && t.name(e1) === 'RENAMED 1' && !ex.sim_preset_user(50) && ed.kind(50) === 'empty',
+    `webeditor SWAP: user slot 51 into empty ${e1 + 1}; 51 empty again`);
+  await ed.swap(fk, 93);                            // (a factory slot's preset out to an empty one: INIT stays as a record)
+  check(ex.sim_preset_user(fk) && t.name(fk) === 'INIT' && ex.sim_preset_user(93),
+    `webeditor SWAP: factory-range slot ${fk + 1} with empty 94: ${fk + 1} holds INIT (its factory preset would come back otherwise: ${ex.sim_preset_user(fk) ? 'a record' : 'none'} "${t.name(fk)}"), 94 ${t.name(93)}`);
   await ed.swap(e1, e2);
   check(t.name(e2) === 'RENAMED 1' && !ex.sim_preset_user(e1) && ed.kind(e1) === 'empty',
     `webeditor SWAP: ${e1 + 1} and empty ${e2 + 1}: ${e1 + 1} empty again (no INIT record past the factory slots)`);

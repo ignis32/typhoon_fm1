@@ -21,8 +21,8 @@ export default function (t) {
     'sysex: the JS command numbers are the firmware\'s (web/presets/tsx.mjs = core/sysex.c)');
   const list = req(TSX.CMD.LIST, [0, 4]);
   const n0 = TSX.nameOf(list.data.slice(1, 13)), u2 = list.data[2 * 13];
-  check(list.status === 'OK' && list.data.length === 52 && n0 === 'RECORDER' && list.data[0] === 0 && u2 === 1,
-    `sysex LIST 1..4: 1 RECORDER factory, 3 the user's (${n0}, ${list.data[0]}, ${u2})`);
+  check(list.status === 'OK' && list.data.length === 52 && n0 === t.name(0) && n0 === 'SWEEP LEAD' && list.data[0] === 0 && u2 === 1,
+    `sysex LIST 1..4: 1 SWEEP LEAD factory, 3 the user's (${n0}, ${list.data[0]}, ${u2})`);
   check(req(TSX.CMD.READ, [0, 0, 0, 64]).status === 'EMPTY', 'sysex READ of a factory slot: EMPTY');
   const rec = [];
   for (let at = 0; at < 512; at += 64) rec.push(...req(TSX.CMD.READ, [2, ...TSX.u16(at), 64]).data);

@@ -6,24 +6,14 @@ export default function (t) {
   const { ex, C, L1, LN, SP, SG, G, check, run } = t;
   const own = (g) => ex.sim_own() >> g & 1;
 
-  // the factory CLARINET (slot 3), as made on the device (first: the SAVE below writes into slot 3)
-  const layer = { P_ENGINE: C.ENG_ID_ERS, P_LEVEL: 100, P_MUTE: 0, P_TRANS: 0, P_FINE: 0, P_PAN: 0, P_ATK: 0, P_REL: 50,
-    P_FTYPE: 0, P_BR_AMP: 0, P_BR_FLT: 40, P_BR_SHP: 63, P_DELAY: 0, P_DEC: 64, P_SUS: 127 };
-  const want = [
-    { ...layer, P_E0: 0, P_E1: 1, P_E2: 90, P_E3: 2, P_E4: 101, P_E5: 65, P_E6: 0, P_E7: 20 },
-    { ...layer, P_LEVEL: 46, P_E0: 9, P_E1: 2, P_E2: 30, P_E3: 0, P_E4: 38, P_E5: 23, P_E6: 0, P_E7: 0 },
-    { ...layer, P_ENGINE: C.ENG_ID_OFF, P_BR_SHP: 40 },   // (an OFF layer keeps the first engine's BR>SHP: FM's 40
-                                                          // since 2026-10-28, SINE's 30 before; picking one sets its own)
-  ];
-  const snd = { S_DRIVE: 6, S_DRV_AT: 62, S_REV_SIZE: 90, S_REV_DECAY: 70, S_REV_DAMP: 50, S_REV_MIX: 30,
-    S_DT_CENTS: 9, S_DT_DELAY: 10, S_DT_WIDTH: 127, S_DT_MIX: 12 };
+  // the factory DOUBLE REEDS (slot 3: core/factory.h, the user's own, 2026-10-29; each factory preset is checked value
+  // for value against what it was made from by tools/factory_from_backup.mjs --check), loaded before the SAVE below
+  // writes into slot 3: two ERS layers apart, the reverb and the volume its own
   ex.sim_preset(2);
-  const bad = [];
-  want.forEach((ps, l) => Object.entries(ps).forEach(([k, v]) => { const g = ex.sim_par_get(LN(l, C[k])); if (g !== v) bad.push(`L${l + 1}.${k}=${g}`); }));
-  for (const [k, v] of Object.entries(snd)) { const g = ex.sim_par_get(SP(C[k])); if (g !== v) bad.push(`${k}=${g}`); }
-  const owns = (1 << C.GR_DRIVE) | (1 << C.GR_REVERB) | (1 << C.GR_DETUNE) | (1 << C.GR_VOLUME);   // (VOLUME 90: 2026-10-25)
-  check(ex.sim_preset_user(2) === 0 && t.name(2) === 'CLARINET' && ex.sim_own() === owns && bad.length === 0,
-    `factory slot 3 is the CLARINET made on the device (own ${ex.sim_own().toString(2)}${bad.length ? ', differs: ' + bad.join(' ') : ''})`);
+  const pans = [0, 1].map((l) => ex.sim_par_get(LN(l, C.P_PAN))), engs = [0, 1].map((l) => ex.sim_par_get(LN(l, C.P_ENGINE)));
+  check(ex.sim_preset_user(2) === 0 && t.name(2) === 'DOUBLE REEDS' && engs.every((e) => e === C.ENG_ID_ERS) &&
+    pans.join() === '-18,18' && ex.sim_own() === ((1 << C.GR_REVERB) | (1 << C.GR_VOLUME)),
+    `factory slot 3 is DOUBLE REEDS (ERS ${engs.join(' ')}, pans ${pans.join(' ')}, own ${ex.sim_own().toString(2)})`);
 
   // a sound group: the preset uses the global one until it is turned on a preset page; holding FX gives it back
   // (INIT: every factory preset owns some group)
@@ -53,7 +43,7 @@ export default function (t) {
   check(ex.sim_par_get(L1(C.P_LEVEL)) === 77 && ex.sim_par_get(SP(C.S_REV_MIX)) === 100 && own(C.GR_REVERB) === 1,
     'slot 3 loads back: the level, its own reverb');
   ex.sim_preset(1);
-  check(ex.sim_preset_user(1) === 0 && ex.sim_par_get(L1(C.P_LEVEL)) !== 77, 'slot 2 is still the factory PIPE FLUTE');
+  check(ex.sim_preset_user(1) === 0 && ex.sim_par_get(L1(C.P_LEVEL)) !== 77, `slot 2 is still the factory ${t.name(1)}`);
   ex.sim_enc(C.ENC_PRESETS, 1); run(30);
   check(ex.sim_preset_cur() === 2 && ex.sim_par_get(L1(C.P_LEVEL)) === 77, 'PRESETS turns to slot 3: it loads');
 

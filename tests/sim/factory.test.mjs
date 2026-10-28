@@ -7,7 +7,7 @@ import * as TSX from '../../web/presets/tsx.mjs';
 export default function (t) {
   const { ex, check, run } = t;
   const n = t.sysex(TSX).req(TSX.CMD.INFO).data[6];
-  check(n === 92, `factory presets: ${n}`);
+  check(n === 27, `factory presets: ${n} (core/factory.h: the user's 26 and CLARINET, 2026-10-29)`);
   const bad = [], quiet = [];
   for (let k = 0; k < n; k++) {
     ex.sim_preset(k);
