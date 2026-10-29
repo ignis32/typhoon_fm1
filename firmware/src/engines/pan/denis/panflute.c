@@ -54,7 +54,7 @@
  *
  * Plain C99: static state, no allocation, no I/O. */
 
-#include <math.h>
+#include "pf_math.h"                               /* typhoon: <math.h> on fm1-base's fastmath (CHANGES.md 3) */
 #include <stdint.h>
 
 #include "panflute.h"
@@ -92,6 +92,14 @@ static uint64_t splitmix(uint64_t x)
     z = (z ^ (z >> 30)) * UINT64_C(0xBF58476D1CE4E5B9);
     z = (z ^ (z >> 27)) * UINT64_C(0x94D049BB133111EB);
     return z ^ (z >> 31);
+}
+
+/* typhoon (CHANGES.md 1): the draw's hash out of line, its multiply by GOLDEN with it, so no 64-bit
+ * multiply is inlined beside the render's loads (the FM-1's AC79 now and then corrupts a register
+ * there: fm1-base bsp/docs/CPU.md). The same numbers. */
+static __attribute__((noinline)) uint64_t splitmix_at(uint64_t key, uint64_t n)
+{
+    return splitmix(key + n * GOLDEN);
 }
 
 /* Ramps ========================================================================================
@@ -217,8 +225,9 @@ static float ramp_tick(Ramp *r)
 typedef struct {
     /* the bore: the line's integer part (n samples), the Thiran's coefficient and states, the
      * loss's one-pole and scalar and state; the scalar as fitted and the radiation's share of
-     * the loss at f1, 2 alpha_r (k1 a)^2 */
-    float line[BORE_SLOTS];
+     * the loss at f1, 2 alpha_r (k1 a)^2. typhoon (CHANGES.md 2): the line and the jet's line
+     * are a pool slot's while the pipe is awake (pool_take), 0 while it sleeps */
+    float *line;
     int write, n;
     float th, th_x1, th_y1;
     float pole, gain, lp_y, gain_fit, radiated;
@@ -231,7 +240,7 @@ typedef struct {
     float jet_m, flue, half, width, offset, damping, growth, u_mf;
     float u_at, speed, a1, a2, a3, ic1, ic2;
     /* the convection line, the transit it reads at (0: unset, the target taken at once) */
-    float jet[JET_SLOTS];
+    float *jet;
     int jet_write;
     float tau;
     /* the loop: the jet-drive per unit of flow difference, rho delta_d / S_m sr; the vortex
@@ -250,6 +259,13 @@ typedef struct {
 } Pipe;
 
 static Pipe pipes[PF_PIPES];
+
+/* typhoon (CHANGES.md 2): the lines of PF_POOL pipes at a time, not of all 25 (37.7 KB of RAM, the
+ * FM-1 has not got it: 5 KB this way). A pipe takes a slot as it wakes and gives it back as it
+ * sleeps; two or three sound at once (a hop: the one the lip leaves, the one it lands on). */
+#define PF_POOL 4
+static float pool_line[PF_POOL][BORE_SLOTS], pool_jet[PF_POOL][JET_SLOTS];
+static Pipe *pool_owner[PF_POOL];
 /* the open share of the end with the lip at rest, s(r) */
 static float open_rest;
 
@@ -387,10 +403,10 @@ static void pipe_build(Pipe *p, const PfPipe *t)
 static void pipe_clear(Pipe *p)
 {
     int i;
-    for (i = 0; i < BORE_SLOTS; i++) {
+    for (i = 0; p->line && i < BORE_SLOTS; i++) {   /* typhoon: asleep, no lines (CHANGES.md 2) */
         p->line[i] = 0.0f;
     }
-    for (i = 0; i < JET_SLOTS; i++) {
+    for (i = 0; p->jet && i < JET_SLOTS; i++) {
         p->jet[i] = 0.0f;
     }
     p->write = p->jet_write = 0;
@@ -425,6 +441,54 @@ static float bore_peak(const Pipe *p)
         m = fmaxf(m, fabsf(p->line[(p->write - i) & (BORE_SLOTS - 1)]));
     }
     return m;
+}
+
+/* typhoon (CHANGES.md 2): the pool. A sleeping pipe gives its slot back, its lines cleared. */
+static void pool_give(Pipe *p)
+{
+    int s;
+    pipe_clear(p);
+    for (s = 0; s < PF_POOL; s++) {
+        if (pool_owner[s] == p) {
+            pool_owner[s] = 0;
+        }
+    }
+    p->line = p->jet = 0;
+    p->awake = 0;
+}
+
+/* A waking pipe takes a free slot, its lines cleared. With none free (a fifth pipe while four still
+ * ring: hops faster than their tails die), the slot of the quietest pipe the jet has left is taken
+ * (its tail cut), else of the pipe with the least share of the jet, but never of one woken in this
+ * block (`fresh`: those pipes are in the block's list already). */
+static void pool_take(Pipe *p, const Pipe *const *fresh, int nfresh)
+{
+    int s, best = -1, j;
+    float key = 0.0f;
+    for (s = 0; s < PF_POOL && pool_owner[s]; s++) {
+    }
+    if (s == PF_POOL) {
+        for (s = 0; s < PF_POOL; s++) {
+            Pipe *o = pool_owner[s];
+            float driven = fmaxf(ramp_value(&o->share), o->share.target), k;
+            for (j = 0; j < nfresh && fresh[j] != o; j++) {
+            }
+            if (j < nfresh) {
+                continue;
+            }
+            k = driven > 0.0f ? 1e9f + driven : bore_peak(o);   /* (any undriven pipe before a driven one) */
+            if (best < 0 || k < key) {
+                best = s;
+                key = k;
+            }
+        }
+        s = best;
+        pool_give(pool_owner[s]);
+    }
+    pool_owner[s] = p;
+    p->line = pool_line[s];
+    p->jet = pool_jet[s];
+    pipe_clear(p);
 }
 
 /* The lip moved to the covering `g` (clamped): the end's all-pass, the vortex loss on the
@@ -706,8 +770,7 @@ void pf_init(void)
     open_rest = open_share(PF_LIP_OVERLAP);
     for (i = 0; i < PF_PIPES; i++) {
         pipe_build(&pipes[i], &PF_PIPE_TABLE[i]);
-        pipe_clear(&pipes[i]);
-        pipes[i].awake = 0;
+        pool_give(&pipes[i]);                      /* typhoon: clear, asleep, its slot back */
         ramp_flat(&pipes[i].share, 0.0f);
         ramp_flat(&pipes[i].cover, 0.0f);
     }
@@ -733,7 +796,7 @@ void pf_init(void)
     raft_awake = 0;
     since_wake = 0;
     floor_pa = powf(10.0f, PF_SLEEP_FLOOR_DB / 20.0f);
-    noise_key = splitmix(TURBULENCE);
+    noise_key = splitmix_at(TURBULENCE, 0);        /* typhoon: splitmix(TURBULENCE), out of line */
     cal[PF_CAL_BREATH_PP] = PF_BREATH_PP;
     cal[PF_CAL_BREATH_MF] = PF_BREATH_MF;
     cal[PF_CAL_BREATH_FF] = PF_BREATH_FF;
@@ -879,7 +942,7 @@ static void render_raft(float *mic, int n, const int *awake, int count)
         float draw, y = 0.0f;
         /* the turbulence's draw: SplitMix64 of the source and the samples since the wake, 23
          * bits to (-1, 1) */
-        uint64_t z = splitmix(noise_key + since_wake * GOLDEN);
+        uint64_t z = splitmix_at(noise_key, since_wake);   /* typhoon: out of line (CHANGES.md 1) */
         draw = (float)(2u * (uint32_t)(z >> 41) + 1u) * (1.0f / 8388608.0f) - 1.0f;
         since_wake++;
         for (j = 0; j < count; j++) {
@@ -941,7 +1004,8 @@ static void show(void)
 float *pf_render(int frames)
 {
     float p0, p1, last[PF_PIPES];
-    int awake[PF_PIPES], count = 0, woke = 0, i, done;
+    int awake[PF_PIPES], count = 0, woke = 0, i, done, nfresh = 0;
+    const Pipe *fresh[PF_PIPES];                   /* typhoon: woken in this block (pool_take) */
     if (frames > PF_BLOCK) {
         frames = PF_BLOCK;
     }
@@ -960,6 +1024,8 @@ float *pf_render(int frames)
         Pipe *p = &pipes[i];
         float g1 = ramp_ahead(&p->share, frames - 1);
         if (!p->awake && (ramp_value(&p->share) * p0 > 0.0f || g1 * p1 > 0.0f)) {
+            pool_take(p, fresh, nfresh);           /* typhoon: its lines (CHANGES.md 2) */
+            fresh[nfresh++] = p;
             p->awake = 1;
             woke = 1;
             if (!raft_awake) {
@@ -967,6 +1033,11 @@ float *pf_render(int frames)
                 since_wake = 0;
             }
         }
+    }
+    for (i = 0; i < PF_PIPES; i++) {               /* typhoon: listed after the wakes (a taken slot's
+                                                    * pipe may have been asleep'd by one) */
+        Pipe *p = &pipes[i];
+        float g1 = ramp_ahead(&p->share, frames - 1);
         if (p->awake) {
             last[count] = g1;
             awake[count++] = i;
@@ -1008,8 +1079,7 @@ float *pf_render(int frames)
             Pipe *p = &pipes[awake[i]];
             if (last[i] * p1 <= 0.0f && p->peak < floor_pa
                     && bore_peak(p) * p->held < floor_pa) {
-                pipe_clear(p);
-                p->awake = 0;
+                pool_give(p);                      /* typhoon: cleared, asleep, its slot back */
             }
             p->peak = 0.0f;
             sleeping &= !p->awake;
