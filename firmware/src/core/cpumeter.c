@@ -71,6 +71,16 @@ static int cpu2_job(void (*fn)(uint32_t), uint32_t arg)
     (void)arg;
     return 0;
 }
+/* after cpu2_job said 1: wait for the job; when core 2 was given up meanwhile and the job dropped (cpu2_fallback),
+ * fn(arg) here */
+static void cpu2_done(void (*fn)(uint32_t), uint32_t arg)
+{
+#if CPUM_CPU2
+    if (plat_cpu2_wait() == 0)
+        return;
+#endif
+    fn(arg);
+}
 
 /* core 2's state for the page: 0 not in this build, 1 not started (or given up), 2 started, no job yet, 3 counting */
 static int cpum_c2_state(void)

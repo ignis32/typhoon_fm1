@@ -220,6 +220,19 @@ static void layer_set_engine(uint32_t n, uint32_t idx)
     trk[n].p[P_ENGINE] = ENGINES[idx % NENGINES].id;
 }
 
+/* may layer n take the engine at position idx? Not a whole-block engine (engine_t.audio: PANFLUTE) another layer
+ * plays: one layer at a time */
+static int par_engine_free(uint32_t n, uint32_t idx)
+{
+    uint32_t l;
+    if (idx >= NENGINES || !ENGINES[idx].e->audio)
+        return 1;
+    for (l = 0; l < NLAYER; l++)
+        if (l != n && trk[l].p[P_ENGINE] != ENG_ID_OFF && layer_engine(l)->audio)
+            return 0;
+    return 1;
+}
+
 static void par_set(pref_t r, int32_t v)
 {
     const param_desc_t *d = par_desc(r);
@@ -228,6 +241,8 @@ static void par_set(pref_t r, int32_t v)
     if (!d)
         return;
     if (pr_layer(r) && i == P_ENGINE) {            /* by position in this build's ENGINES[] */
+        if (!par_engine_free(par_layer(r), (uint32_t)clamp(v, 0, (int32_t)NENGINES)))
+            return;                                /* (another layer plays it: refused) */
         layer_set_engine(par_layer(r), (uint32_t)clamp(v, 0, (int32_t)NENGINES));   /* (NENGINES: OFF) */
         ps_edited = 1;
         par_dirty++;
@@ -263,8 +278,14 @@ static void par_step(pref_t r, int32_t steps)
     if (!d || !steps)
         return;
     if (pr_layer(r) && (r & 0xFFu) == P_ENGINE) {
-        int32_t idx = (int32_t)eng_pos((uint32_t)par_get(r)) + (steps > 0 ? 1 : -1), np = (int32_t)NENGINES + 1;
-        par_set(r, (idx + np) % np);               /* (the engines, then OFF, round) */
+        int32_t idx = (int32_t)eng_pos((uint32_t)par_get(r)), np = (int32_t)NENGINES + 1, k;
+        for (k = 0; k < np; k++) {                 /* (the engines, then OFF, round; past one another layer plays
+                                                    * that is one layer's only) */
+            idx = (idx + (steps > 0 ? 1 : -1) + np) % np;
+            if (par_engine_free(par_layer(r), (uint32_t)idx))
+                break;
+        }
+        par_set(r, idx);
         return;
     }
     if (d->max - d->min > 40 && (steps > 1 || steps < -1))

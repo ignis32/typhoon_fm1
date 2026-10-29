@@ -51,6 +51,13 @@ typedef struct track {
 } track_t;
 static track_t trk[NLAYER];
 
+/* the performance's sources, raw, for an engine with controls of its own (engine_t.audio: PAN's bend and vibrato) and
+ * the routes to come (sources to an engine's controls, many to many): every controller's last value as it came
+ * (cc_raw, 7 bits: app.c midi_in writes it, the audio reads it; the tilt's and the breath's too), and the breath after
+ * the curve (src_breath, Q15: core/layers.c, before engine_t.audio runs) */
+static volatile uint8_t cc_raw[128];
+static int32_t src_breath;
+
 /* the sound's parameters (global, or the preset's own: see the top). New ones go at the end (presets map by index) */
 enum {
     S_BC_LO, S_BC_HI,                /* GR_CURVE: CC2 below LO counts as nothing, from HI on as full; LO below 0: a head start */

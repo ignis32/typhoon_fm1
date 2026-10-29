@@ -13,8 +13,13 @@ usb_host = true                # GLOBAL > USB HOST: the re.corder by cable, thro
 install_app = "install_app.js"  # the installer's step before an install: the user presets saved to a file first
 words = "words.tsv"            # the screen reader's words (fm1-reader)
 include = ["../firmware/src", "../firmware/gen", "../build/engines"]   # typhoon itself: the layers, engines, presets, UI
+o2 = ["../firmware/src/engines/pan/denis/panflute.c"]   # Denis's pan flute, his own unit at -O2 (his names stay his:
+                               # engines/pan/eng_pan.c calls his pf_*)
+cpu2 = true                    # the second core: PANFLUTE renders there (engine_t.audio, core/cpumeter.c cpu2_job)
+cpu2_fallback = true           # a unit whose core 2 misreads (some do: fm1-base's chip/fm1_cpu1.h): one core until
+                               # power-off, PANFLUTE on core 1, rather than a restart
 # the site
 tagline = "the voice of the Artinoise re.corder"
 repo = "https://github.com/ignis32/typhoon_fm1"
 licence = "MPL-2.0"
-credits = "Built on fm1-base (Charles Vestal) and felucca-bsp, from Felucca by Leo Kuroshita (Hügelton Instruments); the engine ANALOG from Felucca-Engines."
+credits = "Built on fm1-base (Charles Vestal) and felucca-bsp, from Felucca by Leo Kuroshita (Hügelton Instruments); the engine ANALOG from Felucca-Engines; PANFLUTE is Denis Rosset's toy pan flute."

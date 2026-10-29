@@ -37,6 +37,9 @@ factory presets; the only delay presets carry is the vibrato's swell. Last check
 | 21 | breath LP (ERS, FM EDIT 5) | a filter, no follower | 0 | knobs | no lag (a darker sound is not a later one) |
 | 22 | TONE SWEEP | opens by how fast breath rises | by design | knobs | an effect of speed, not a delay |
 | 22b | TONE SWEEP: its rise de-stepped (dsp/dspx.c ctl_destep) | the rise it reads is breath through a one-pole: the re.corder's ~50 breath steps a second each fired the accent (a "brbrbr" flutter at soft breath) | 15 ms, the accent's bite only; the level and BR>TONE at once | constant TONE_SWEEP_DESTEP_MS (core/tone.c) | the user, 2026-10-28: a shared de-stepper for what reacts to a change, never on the level |
+| 22c | PANFLUTE: the breath's and the bend's line (Denis's, engines/pan/denis/config.h) | each new value is ramped to: a step of up to 2 values over 10.4 ms (his TEControl's period: a swell's 7-bit stairs joined), 8 and more over 4 ms (a tongued attack keeps its edge), between: between | 4 .. 10.4 ms | constants PF_LINE_PERIOD_MS, PF_LINE_FLOOR_MS, PF_LINE_SMALL, PF_LINE_LARGE (his config.h) | his design; the re.corder steps every ~20 ms, so the small-step line may be retuned to that |
+| 22d | PANFLUTE: a hop (a new key under held breath) | the jet lifts off the old pipe, then lands on the new one | 20 + 20 ms | constants PF_HOP_LIFT_MS, PF_HOP_ATTACK_MS (his config.h) | by design (a pan flute's hop); watch if slurs feel late |
+| 22e | PANFLUTE on the second core | its controls are taken at the audio block's start (as every engine's: the main loop posts between blocks), the block rendered while core 1 renders the other layers | 0 added | — | fine |
 | 23 | effects: DETUNE's copies, DELAY, reverb PRE-DLY | late copies beside the dry, which is at once | knobs | knobs | not on the dry path |
 | 24 | audio out | the render a block (APP_BLOCK 256 frames, 5.8 ms) ahead of the DAC | ~6 .. 12 ms | — | the platform; fine |
 

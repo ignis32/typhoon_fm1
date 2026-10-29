@@ -89,6 +89,8 @@ typedef struct {                 /* per-voice control-rate modulation, computed 
     int32_t shape;               /* 0..127 << 8 */
     int32_t envq15;              /* env value (for engines that use it as a mod source) */
     int32_t fine;                /* the residual below 1/16 semitone in inc: unison detune, TUNE, bend (1/4096) */
+    uint32_t off;                /* typhoon: the control block's first frame in the audio block (an engine that renders
+                                  * a whole audio block, engine_t.audio, hands out its frames from there) */
 } vmod_t;
 
 typedef struct {
@@ -144,6 +146,13 @@ typedef struct {                 /* an engine (engines.c ENGINES[]; the eng_*.c 
      * in, 0 = none: a part plays one engine at a time, so they share one region; on a switch to the engine
      * (after the old one's fade) the region is zeroed when another engine had it (eng_mem_claim) */
     uint16_t mem;
+    /* typhoon: an engine that renders a whole audio block at once, on the second core where there is one (PAN). audio
+     * runs once an audio block, on core 1, before the control blocks: the block's controls into the engine, its job
+     * handed to core 2 (1: out, audio_done waits for it after the other layers) or done at once (0). render then hands
+     * out a control block's frames of it (vmod_t.off). One layer at a time plays such an engine (core/layers.c: the
+     * lowest; core/params.c: a second is refused) */
+    int (*audio)(struct track *t, uint32_t n);
+    void (*audio_done)(uint32_t n);
 } engine_t;
 
 #endif /* FELUCCA_ENGINE_H */

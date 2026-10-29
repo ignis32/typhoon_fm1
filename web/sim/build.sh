@@ -20,5 +20,6 @@ $ZIG cc --target=wasm32-wasi -mexec-model=reactor -O2 -ffp-contract=off -std=gnu
     -Ibase/web/emu -Ibase/host -Ibase/device -Ibase/include -Ibase/lib -Iapp -I"$GEN" -Ifirmware/src -Ifirmware/gen \
     -Wall -Wno-unused-function -Wno-unused-parameter -Wno-unused-variable -Wno-unused-but-set-variable ${SIM_CFLAGS:-} \
     $EXP -Wl,-z,stack-size=262144 \
-    -o "$OUT/typhoon.wasm" web/sim/typhoon_sim.c -lm
+    -o "$OUT/typhoon.wasm" web/sim/typhoon_sim.c firmware/src/engines/pan/denis/panflute.c -lm   # (Denis's pan flute: its
+                                                    # own unit, as app/fm1.toml's o2 builds it on the device)
 echo "sim: $OUT ($(wc -c < "$OUT/typhoon.wasm" | tr -d ' ') B wasm)"

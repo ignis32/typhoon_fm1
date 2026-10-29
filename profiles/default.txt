@@ -5,3 +5,4 @@ fm
 analog
 ers
 eva
+pan

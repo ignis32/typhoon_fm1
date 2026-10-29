@@ -25,11 +25,13 @@ int typhoon_ble_at_boot(void);
 #if __has_include("typhoon_engines.h")
 #include "typhoon_engines.h"
 #endif
-#if !(defined TYPHOON_ENG_FM || defined TYPHOON_ENG_ANALOG || defined TYPHOON_ENG_ERS || defined TYPHOON_ENG_EVA)
+#if !(defined TYPHOON_ENG_FM || defined TYPHOON_ENG_ANALOG || defined TYPHOON_ENG_ERS || defined TYPHOON_ENG_EVA || \
+      defined TYPHOON_ENG_PAN)
 #define TYPHOON_ENG_FM 1
 #define TYPHOON_ENG_ANALOG 1
 #define TYPHOON_ENG_ERS 1
 #define TYPHOON_ENG_EVA 1
+#define TYPHOON_ENG_PAN 1
 #endif
 #define TYPHOON_BLE FM1B_BLE
 #ifdef PLAT_WEB

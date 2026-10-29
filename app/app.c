@@ -158,6 +158,8 @@ static void midi_send(uint32_t st, uint32_t d1, uint32_t d2)
 #include "dsp/dspf.c"                              /* (its float twin: maths, the filter) */
 #include "dsp/oscf.c"                              /* (the float oscillators and noises, every one as loud) */
 #include "dsp/breathlp.c"                          /* (an engine's breath LP: ERS's, FM's) */
+#include "core/cpumeter.c"                         /* (the render's load, the xruns: GLO > PERFORMANCE, STATS; and the
+                                                    * second core's jobs, cpu2_job: before the engines, PAN's) */
 #include "engines/engines.h"
 #include "core/tone.c"
 #include "core/layers.c"
@@ -169,7 +171,6 @@ static void midi_send(uint32_t st, uint32_t d1, uint32_t d2)
 #include "ble.c"                                   /* app/ble.c: Bluetooth (BLE-P, BLE-C) for the UI, on plat_ble_* */
 #include "usbaudio.c"                              /* app/usbaudio.c: GLOBAL > USB AUDIO, on plat_usb_audio_set */
 #include "usbhost.c"                               /* app/usbhost.c: GLOBAL > USB HOST, on plat_usb_host */
-#include "core/cpumeter.c"                         /* (the render's load, the xruns: GLO > PERFORMANCE, STATS) */
 #include "ui/layout.h"
 #include "ui/ui.c"
 #include "core/sysex.c"
@@ -216,6 +217,8 @@ static uint32_t t_cc2;                             /* CC2 came last when (the ke
 static void midi_in(uint32_t st, uint32_t d1, uint32_t d2)
 {
     uint32_t ty = st & 0xF0u;
+    if (ty == 0xB0u)
+        cc_raw[d1 & 127u] = (uint8_t)d2;           /* (every controller as it came: core/layers.h, an engine's sources) */
     if (ty == 0xB0u && gpar[G_TILT_CC] && d1 == (uint32_t)gpar[G_TILT_CC]) {   /* the tilt: a bend instead */
         uint32_t pb = tilt_bend(d2);
         perf_bend(pb & 0x7Fu, pb >> 7);
@@ -243,6 +246,11 @@ static struct {
 
 void app_init(void)
 {
+#if CPUM_CPU2
+    plat_cpu2_set(1);                              /* the second core (fm1.toml cpu2; with cpu2_fallback: one core after
+                                                    * a failure): PANFLUTE renders there (engine_t.audio). Here only:
+                                                    * the one time it may start */
+#endif
     state_load();
     ua_init();                                     /* USB AUDIO as saved, before USB starts (app/usbaudio.c) */
     bt_init();                                     /* BLE-P as saved, before the radio starts (app/ble.c) */

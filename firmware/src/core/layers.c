@@ -293,11 +293,13 @@ static void notes_event(const pev_t *ev)
     }
 }
 
-/* the breath, Q15, once a block */
-static void breath_tick(void)
+/* the breath, Q15, after the curve, before SMOOTH (src_breath: an engine with controls of its own takes it there) */
+static int32_t breath_src(void)
 {
     int32_t src = gpar[G_BSRC], x;
-    int use_cc2 = src == 1 || (src == 0 && pf.t_cc2 && pf.blocks - pf.t_cc2 < 3u * BLOCKS_PER_S);
+    int use_cc2 = src == 1 || (src == 0 && pf.t_cc2 && (int32_t)(pf.blocks - pf.t_cc2) < (int32_t)(3u * BLOCKS_PER_S));
+    /* (signed: a CC2 taken at the audio block's start is stamped pf.blocks | 1, one ahead of the count until its
+     * first control block; unsigned, that read as long ago and the velocity blew for a block) */
     if (use_cc2)
         x = pf.braw;
     else
@@ -305,20 +307,58 @@ static void breath_tick(void)
     perf_ui.breath_in = x;
     if (use_cc2)
         x = breath_curve(x);                       /* (velocity is already what the player meant) */
-    pf.breath += (int32_t)(mul64(x - pf.breath, pole_k((uint32_t)gpar[G_BSMOOTH])) >> 15);
+    return x;
+}
+/* the breath, Q15, once a block */
+static void breath_tick(void)
+{
+    pf.breath += (int32_t)(mul64(breath_src() - pf.breath, pole_k((uint32_t)gpar[G_BSMOOTH])) >> 15);
 }
 
-/* one control block of every layer, added to l[] and r[] (CTL frames, Q15) */
-static void layers_block(int32_t *outl, int32_t *outr)
+/* the layer that plays an engine rendering whole audio blocks (engine_t.audio: PANFLUTE, on the second core): the
+ * lowest that has one, -1 none (another layer with one is silent: one at a time). The audio block runs in two passes
+ * then: the other layers' control blocks while core 2 renders it, keeping for each control block what that layer's
+ * chain needs (cb); then its chain and the effects, block by block */
+#define NCB (APP_BLOCK / CTL)
+static struct {
+    int8_t owner;
+    struct { vmod_t m; int32_t qgain, br; uint8_t on; } cb[NCB];
+    int32_t fxbr[NCB];                             /* the breath the effects had in each control block */
+} lblk = {-1};
+
+/* a layer's control block from its engine on: the render, the engine's breath LP, TONE, level and pan into the mix */
+static void layer_out(uint32_t l, const engine_t *e, const vmod_t *mv, int32_t qgain, int32_t br, int32_t *outl,
+                      int32_t *outr)
 {
     static int32_t buf[CTL];
-    uint32_t l, i;
-    while (pq_r != pq_w) {
-        notes_event(&pq[pq_r % PQ]);
-        pq_r++;
+    track_t *t = &trk[l];
+    const int16_t *p = t->p;
+    vmod_t m = *mv;
+    int32_t lev = p[P_LEVEL], pan = p[P_PAN], gl = (64 - pan) * lev, gr = (64 + pan) * lev;   /* / (64 * 127) */
+    uint32_t i;
+    memset(buf, 0, sizeof buf);
+    e->render(t, &t->v[0], buf, CTL, &m);
+    if (e->blp)                                    /* the engine's breath LP, on its knobs (dsp/breathlp.c) */
+        blp_block(&lay[l].blp, buf, p[P_E0 + e->blp - 1u], p[P_E0 + e->blp], p[P_E0 + e->blp + 1u], br);
+    tone_block(l, buf, CTL, p, &m, br);            /* the TONE stage (core/tone.c) */
+    if (qgain != 32768) {                          /* (the quirk's level) */
+        gl = (gl * qgain) >> 15;
+        gr = (gr * qgain) >> 15;
     }
+    for (i = 0; i < CTL; i++) {                    /* level and pan (centre: both sides at the level) */
+        outl[i] += (buf[i] * (gl >> 4)) >> 9;
+        outr[i] += (buf[i] * (gr >> 4)) >> 9;
+    }
+}
+
+/* one control block (number cb of the audio block) of every layer, added to l[] and r[] (CTL frames, Q15); the layer
+ * of a whole-block engine (lblk.owner) is kept for the second pass */
+static void layers_block(int32_t *outl, int32_t *outr, uint32_t cb)
+{
+    uint32_t l;
     pf.blocks++;
     breath_tick();
+    lblk.fxbr[cb] = pf.breath;
     perf_ui.note = pf.note;
     perf_ui.gate = pf.gate;
     perf_ui.breath = pf.breath;
@@ -328,7 +368,7 @@ static void layers_block(int32_t *outl, int32_t *outr)
         const int16_t *p = t->p;
         const engine_t *e;
         vmod_t m;
-        int32_t target, a0, lev = p[P_LEVEL], pan = p[P_PAN], qfine = 0, qgain = 32768;
+        int32_t target, a0, lev = p[P_LEVEL], qfine = 0, qgain = 32768;
         uint32_t base;
         if (p[P_ENGINE] == ENG_ID_OFF) {           /* no engine: silent, nothing rendered */
             if (lay[l].id != ENG_ID_OFF) {
@@ -356,6 +396,12 @@ static void layers_block(int32_t *outl, int32_t *outr)
                 layer_start(l);
         }
         e = ENGINES[lay[l].idx].e;
+        if (e->audio && (int32_t)l != lblk.owner) {   /* a second layer on a one-layer engine: silent */
+            lay[l].amp = 0;
+            perf_ui.amp[l] = 0;
+            v->active = 0;
+            continue;
+        }
         if (e->block)
             e->block(t);                           /* (also with no voice sounding: the interface says so) */
         if (p[P_MUTE] && v->gate) {                /* muted: it fades out as after a note (P_REL), no click */
@@ -399,37 +445,78 @@ static void layers_block(int32_t *outl, int32_t *outr)
         m.cutoff = (pf.breath * p[P_BR_FLT]) >> 7;
         m.shape = (64 << 8) + ((pf.breath * p[P_BR_SHP]) >> 7);
         perf_ui.amp[l] = m.amp1;
-        memset(buf, 0, sizeof buf);
-        e->render(t, v, buf, CTL, &m);
-        if (e->blp)                                /* the engine's breath LP, on its knobs (dsp/breathlp.c) */
-            blp_block(&lay[l].blp, buf, p[P_E0 + e->blp - 1u], p[P_E0 + e->blp], p[P_E0 + e->blp + 1u], pf.breath);
-        tone_block(l, buf, CTL, p, &m, pf.breath);   /* the TONE stage (core/tone.c) */
-        {                                          /* level and pan (centre: both sides at the level) */
-            int32_t gl = (64 - pan) * lev, gr = (64 + pan) * lev;     /* / (64 * 127) */
-            if (qgain != 32768) {                  /* (the quirk's level) */
-                gl = (gl * qgain) >> 15;
-                gr = (gr * qgain) >> 15;
-            }
-            for (i = 0; i < CTL; i++) {
-                outl[i] += (buf[i] * (gl >> 4)) >> 9;
-                outr[i] += (buf[i] * (gr >> 4)) >> 9;
-            }
+        m.off = cb * CTL;
+        if (e->audio) {                            /* rendered on core 2 meanwhile: its chain in the second pass */
+            lblk.cb[cb].m = m;
+            lblk.cb[cb].qgain = qgain;
+            lblk.cb[cb].br = pf.breath;
+            lblk.cb[cb].on = 1;
+            continue;
         }
+        layer_out(l, e, &m, qgain, pf.breath, outl, outr);
     }
 }
 
 static void fx_block(int32_t *l, int32_t *r, int32_t breath);   /* core/fx.c */
 
-/* the audio ISR's whole job: n frames (a multiple of CTL), L R L R, Q15, soft above ~-2 dBFS */
+/* the audio ISR's whole job: n frames (a multiple of CTL), L R L R, Q15, soft above ~-2 dBFS. The events first (the
+ * main loop posts between audio blocks: every control block of one would see the same); a whole-block engine's layer
+ * (lblk) gets its controls and its job there, then two passes (lblk), else one */
 static void layers_audio(int32_t *out, uint32_t n)
 {
+    static int32_t ml[APP_BLOCK], mr[APP_BLOCK];   /* the first pass's mix (the other layers) */
     int32_t l[CTL], r[CTL];
     uint32_t b, i;
+    const engine_t *be = 0;
+    int out2 = 0;
+    while (pq_r != pq_w) {
+        notes_event(&pq[pq_r % PQ]);
+        pq_r++;
+    }
+    lblk.owner = -1;
+    for (i = 0; i < NLAYER && n <= APP_BLOCK; i++) {
+        uint8_t miss;
+        const engine_t *e;
+        if (trk[i].p[P_ENGINE] == ENG_ID_OFF)
+            continue;
+        e = ENGINES[eng_index((uint32_t)trk[i].p[P_ENGINE], &miss)].e;
+        if (e->audio) {
+            lblk.owner = (int8_t)i;
+            be = e;
+            break;
+        }
+    }
+    if (be) {
+        for (b = 0; b < NCB; b++)
+            lblk.cb[b].on = 0;
+        src_breath = breath_src();
+        out2 = be->audio(&trk[lblk.owner], n);     /* (core 2 renders it from here) */
+    }
     for (b = 0; b + CTL <= n; b += CTL) {
         memset(l, 0, sizeof l);
         memset(r, 0, sizeof r);
-        layers_block(l, r);
+        layers_block(l, r, b / CTL);
+        if (be) {                                  /* (the second pass mixes it in) */
+            memcpy(ml + b, l, sizeof l);
+            memcpy(mr + b, r, sizeof r);
+            continue;
+        }
         fx_block(l, r, pf.breath);
+        for (i = 0; i < CTL; i++) {
+            out[2u * (b + i)] += soft_knee(l[i], 26000);
+            out[2u * (b + i) + 1u] += soft_knee(r[i], 26000);
+        }
+    }
+    if (!be)
+        return;
+    if (out2)
+        be->audio_done(n);                         /* (waits for core 2) */
+    for (b = 0; b + CTL <= n; b += CTL) {
+        memcpy(l, ml + b, sizeof l);
+        memcpy(r, mr + b, sizeof r);
+        if (lblk.cb[b / CTL].on)
+            layer_out((uint32_t)lblk.owner, be, &lblk.cb[b / CTL].m, lblk.cb[b / CTL].qgain, lblk.cb[b / CTL].br, l, r);
+        fx_block(l, r, lblk.fxbr[b / CTL]);
         for (i = 0; i < CTL; i++) {
             out[2u * (b + i)] += soft_knee(l[i], 26000);
             out[2u * (b + i) + 1u] += soft_knee(r[i], 26000);
