@@ -61,7 +61,12 @@ static const factory_t FACTORY[] = {
               ENG(1, ENG_ID_ERS, 0), PAR(1, P_LEVEL, 46), PAR(1, P_E0, 9), PAR(1, P_E1, 2), PAR(1, P_E4, 38),
               PAR(1, P_E5, 23), PAR(1, P_E6, 0), SND(S_DRIVE, 6), SND(S_DRV_AT, 62), SND(S_REV_MIX, 30),
               SND(S_DT_MIX, 12), SND(S_VOLUME, 90)}},                                                               /* 27 */
-    {"TOY PANFLUTE", {ENG(0, ENG_ID_PAN, 0), PAR(0, P_E0, 34), PAR(0, P_E1, 74), PAR(0, P_E2, 107),
-                  SND(S_REV_MIX, 42), SND(S_REV_TYPE, 1), SND(S_REV_PRE, 35)}},                                     /* 28: Denis's
-                                                    * pan flute (by hand, 2026-10-29: PP 34, MF 74, FF 107, the user's) */
+    /* 28, 29 by hand (2026-10-29): Denis's pan flute (PANFLUTE). _TEC: as he plays it on a TEControl, his breath
+     * markers (PP 4, MF 12, FF 33), his vibrato, the head's wobble (VIB MODE TILT; bend CC 1 its bite, vibrato CC 13 its
+     * tilt, his defaults); _ART: the re.corder (Artinoise), the user's breath (PP 34, MF 74, FF 107), its rotation
+     * setting an LFO vibrato's depth (VIB MODE LFO = 1, VIB CC 52, CENTRE 64) */
+    {"PANFLUTE_TEC", {ENG(0, ENG_ID_PAN, 0), PAR(0, P_E0, 4), PAR(0, P_E1, 12), PAR(0, P_E2, 33),
+                  PAR(0, P_E8, 1), PAR(0, P_E10, 13), SND(S_REV_MIX, 42), SND(S_REV_TYPE, 1), SND(S_REV_PRE, 35)}},  /* 28 */
+    {"PANFLUTE_ART", {ENG(0, ENG_ID_PAN, 0), PAR(0, P_E0, 34), PAR(0, P_E1, 74), PAR(0, P_E2, 107),
+                  PAR(0, P_E9, 1), PAR(0, P_E10, 52), SND(S_REV_MIX, 42), SND(S_REV_TYPE, 1), SND(S_REV_PRE, 35)}},  /* 29 */
 };

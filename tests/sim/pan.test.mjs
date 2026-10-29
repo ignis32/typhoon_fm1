@@ -52,4 +52,27 @@ export default function (t) {
   const f1 = t.pitch(300, 600, 1000);
   ex.sim_midi(0xB0, 2, 0); ex.sim_midi(0x80, 79, 0); run(1500);
   check(cents(f1, f0) < -60 && cents(f1, f0) > -140, `PANFLUTE: BEND CC 1 at the semitone's plateau bends ${cents(f1, f0).toFixed(0)} cents`);
+  // VIB MODE LFO, VIB CC 52 (a gyro, CENTRE 64): no vibrato at the centre, a swing tilted all the way; VIB CC 0: always
+  const grab = (ms) => { const x = []; for (let i = 0; i < Math.round((ms * 44.1) / 128); i++) { ex.sim_render(128); x.push(...new Float32Array(ex.memory.buffer, ex.sim_out_l(), 128)); } return x; };
+  const swing = (ms) => {                          // the pitch's swing, cents: G5's period by autocorrelation (parabola-
+    const x = grab(ms), W = 1764, P = 44100 / hz(79), f = [];   // refined) in 40 ms windows every 10 ms (the breath's
+    for (let s = 0; s + W + 2 * P < x.length; s += 441) {        // noise moves zero crossings, not this)
+      const r = (k) => { let a = 0, b = 0, c = 0; for (let i = s; i < s + W; i++) { a += x[i] * x[i + k]; b += x[i] * x[i]; c += x[i + k] * x[i + k]; } return a / Math.sqrt(b * c || 1); };
+      let bk = 0, bv = -2;
+      for (let k = Math.floor(P * 0.9); k <= Math.ceil(P * 1.1); k++) { const v = r(k); if (v > bv) { bv = v; bk = k; } }
+      const y0 = r(bk - 1), y2 = r(bk + 1), d = (y0 - y2) / (2 * (y0 - 2 * bv + y2) || 1);
+      f.push(44100 / (bk + d));
+    }
+    return 1200 * Math.log2(Math.max(...f) / Math.min(...f));
+  };
+  const lfo = (cc, v) => {
+    fresh();
+    ex.sim_par_set(L1(C.P_E0 + 9), 1); ex.sim_par_set(L1(C.P_E0 + 10), cc);
+    ex.sim_midi(0xB0, 52, v); ex.sim_midi(0x90, 79, 80); ex.sim_midi(0xB0, 2, 60); run(500);
+    const s = swing(800);
+    ex.sim_midi(0xB0, 2, 0); ex.sim_midi(0x80, 79, 0); run(1500);
+    return s;
+  };
+  const s64 = lfo(52, 64), s127 = lfo(52, 127), s0 = lfo(0, 64);
+  check(s64 < 8 && s127 > 15 && s0 > 15, `PANFLUTE LFO: the gyro centred ${s64.toFixed(1)} cents, tilted ${s127.toFixed(1)}, VIB CC 0 (always) ${s0.toFixed(1)}`);
 }
