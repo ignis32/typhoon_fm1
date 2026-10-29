@@ -19,6 +19,10 @@ three layered voices through its own effects. On
 (`base/`), from [Felucca](https://github.com/hugelton/Felucca) by Leo Kuroshita (Hügelton Instruments). Earlier
 named tornado: its preset backups restore here too.
 
+The PANFLUTE engine is Denis Rosset's pan flute model
+([toy-pan-flute](https://github.com/denisvibecodes/toy-pan-flute), MIT), with the changes typhoon made to it listed in
+`firmware/src/engines/pan/denis/CHANGES.md`.
+
 **On the web** (https://ignis32.github.io/typhoon_fm1/, Chrome or Edge for USB):
 [install](https://ignis32.github.io/typhoon_fm1/install/) it on your FM-1,
 [edit presets](https://ignis32.github.io/typhoon_fm1/editor/) live, or try it in the
@@ -31,6 +35,13 @@ The version is in `VERSION` (every build carries it: the header at power-on, Sys
 - **0.3** (the first typhoon_fm1 release): on fm1-base, MPL-2.0 throughout;
   engines SINE, ANALOG, NOISE, FM, FOLD, VOWEL, ERS, EVA; reverbs PLATE and HALL; 96 preset slots; the preset editor
   (`web/editor/`); LEAPS; USB audio in and out; Bluetooth BLE-P / BLE-C on their own (below).
+- **0.4**: everything since 0.3 below, and the engine **PANFLUTE**, Denis Rosset's physical model of a pan flute (25
+  stopped pipes, G4 .. G6; other notes folded into them by octaves). It runs on the FM-1's second core, on one layer
+  at a time. It keeps all three of his controls: breath (his PP / MF / FF markers as knobs), BEND CC (the lip
+  covering the pipe) and the vibrato. VIB MODE TILT is his vibrato, from a moving controller such as a TEControl's
+  tilt. LFO is a sine at RATE whose depth is set by how far VIB CC is from CENTRE, for example the re.corder's
+  rotation. Factory presets 28 PANFLUTE_TEC (his settings) and 29 PANFLUTE_ART (the re.corder). PERFORMANCE shows
+  each core in its own column.
 - **Since 0.3:** the engines FM, ANALOG, ERS and EVA (SINE, NOISE, FOLD and VOWEL removed: FM at INDEX 0 is the
   sine, EVA has the noises, NS_*); 20 knobs an engine (EDIT 5), older presets read as they were. The mix's
   BREATH LP is ERS's and FM's own (EDIT 5). Every delay on breath is a knob, 0 (none) on a new layer: EVA LAG and
@@ -67,10 +78,12 @@ adapter. While it is ON, no computer can use that port: no USB audio, and no edi
 OFF to get them back, or hold REC at power-on to enter update mode. The setting is saved; the FM-1 starts as a USB
 device and switches to host on its first frame. OFF by default. Untested on an FM-1 yet.
 
-**Performance** (GLO → PERFORMANCE): is the sound keeping up. CPU AVERAGE is the audio's load over about 90 ms;
-WORST BLOCK, 1 S the slowest single block in the last second, and WORST BLOCK the slowest since the reset, each as %
-of the block's time (red from 90 %). XRUNS counts the blocks not done in time since the reset, each a dropout heard as
-a click, and LAST XRUN says when the last one came. Turn KNOB 1 to reset. Over USB: `tools/presets.py stats`.
+**Performance** (GLO → PERFORMANCE): is the sound keeping up. Two columns: CORE 1 (its own work, without its
+waits for core 2) and CORE 2 (NONE when no engine uses it). Each shows AVERAGE, the load over about 90 ms; WORST 1 S,
+the slowest block in the last second; and WORST, the slowest since the reset. All are % of a block's time, red from
+90 %. BLOCK and 1 S below them are the whole render, waits included: that is what must fit in time. XRUNS counts the
+blocks not done in time since the reset, each heard as a click, and says how long ago the last one came. Turn KNOB 1
+to reset. Over USB: `tools/presets.py stats`.
 
 **The sound.** A preset is the whole sound: three layers (engine and its knobs, level, transpose, pan, envelope, how
 breath moves them) and a name. The sound after the layers (breath curve, breath LP, drive, detune, delay, reverb,
