@@ -1,4 +1,16 @@
-# typhoon_fm1 — FM-1 as the voice of the Artinoise re.corder
+
+
+
+# THIS IS EARLY ALPHA, WORK IN PROGRESS, CONTROLS ARE CHAOTIC, CODE IS A MESS AND EVERYTHING IS SUBJECT TO CHANGE.
+
+
+
+
+
+
+
+
+# typhoon_fm1 — FM-1 as the voice of the Artinoise re.corder  (or other EWU)
 
 Custom firmware for the M-VAVE FM-1 that makes it the sound of the re.corder, a breath MIDI controller with no sound
 of its own: breath is loudness and tone, the re.corder's tilt is pitch bend, and the FM-1 plays a stack of up to
