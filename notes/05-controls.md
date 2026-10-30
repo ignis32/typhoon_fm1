@@ -1,0 +1,214 @@
+# Controls: sources, curves and the matrix (design, 2026-10-30)
+
+Status: agreed design, not built yet. When a part is built, mark it here and keep this file the reference.
+
+## Why
+
+Today breath is special: engines read it directly, and many knobs only exist to say "how much breath moves this"
+(BR>AMP, BR>TONE, BR>SHP, BR>LP, DRV AT, EVA BREATH). Other controllers are an afterthought: TILT>BEND in GLO,
+PANFLUTE's own BEND CC / VIB CC knobs inside one preset. Some engine parameters also follow breath where nobody can
+see it, such as EVA's vibrato only starting above 55 % breath. The result is many knobs, some of which do nothing in some
+modes, and no way to give a parameter to another controller.
+
+The new model:
+
+- **Breath is just a CC.** No engine reads breath, or any CC, itself.
+- The **controller** is described once, in GLO: which CC is which source and its curve (**sources**).
+- The **sound** says what each source does, per layer, in a grid (**cells**), one source to many targets.
+- An engine only sees its **targets**: knob values plus what the cells add. Nothing hidden.
+
+## Sources (GLO → CONTROLS)
+
+| Source | Assigned to | Convention (not enforced) |
+|---|---|---|
+| BEND | a CC (with centre: DEAD, RANGE, INVERT, as TILT>BEND now) or MIDI pitch bend | pitch bend |
+| A | a CC, AT (channel aftertouch) or OFF | breath (CC11 by default) |
+| B, C, D | a CC, AT or OFF | free (e.g. the re.corder's rotation, inclination, a TEControl's bite / nod) |
+| AO, BO, CO, DO | derived: the top of A .. D | overblow (growl, drive, a brighter top) |
+
+- **The CONTROLS page:** K1 .. K4 assign A .. D. BEND keeps its page (today's TILT>BEND, renamed).
+- **The curve page:** EDIT opens the curve of the source last touched, so there are no extra GLO pages.
+- **Each of A .. D has, on its curve page:**
+  - **LOW, HIGH, SHAPE:** today's breath CURVE. A's curve is today's breath curve.
+  - **SMOOTH (ms):** default 0. Today's G_BSMOOTH becomes A's. Every source with SMOOTH above 0 is a row in
+    `03-lag-watch.md`.
+  - **OVER:** OFF, or a threshold 1 .. 126 (after the curve).
+    - When set, the source keeps running to 127, and its XO runs 0 → 127 from OVER up to the top. This is the DIY
+      flute's CC11 101..127 → CC99 1..27, generalised.
+    - The threshold is the player's, like the curve, so it is global: one change moves every preset.
+    - A source with OVER OFF has no XO column in the grid.
+- **Curves are global only** (not a preset's own). Today's GR_CURVE preset group goes. The curve is one
+  self-contained piece per source (its type and values in one struct, one function from raw 0..127 to 0..1), so new
+  curve types (reversed, steps, ...) are added inside it later without touching anything that reads sources.
+- **CENTRE for A .. D** (a gyro's middle, signed values) is an idea for later. BEND has it already (DEAD).
+
+## Targets
+
+Two kinds, both declared by the engine (or the layer, for the common ones):
+
+- **Knob targets:** the value is the knob plus the sum of the cells, clamped to the knob's range. The knob is the
+  resting value.
+- **Input targets:** there is no knob; the value is the sum of the cells, resting at 0. Each engine's EXCITE is one, and
+  so are PANFLUTE's LIP and WOBBLE. EXCITE replaces what BR>SHP / vmod.shape and the breath carry into an engine today.
+  With nothing routed to EXCITE the layer is silent. With EXCITE's knob (where an engine has one, e.g. ERS BLOW) up and
+  nothing routed, the layer plays from notes alone (an organ).
+
+**Choosing what is offered.** One place per engine, a true / false:
+
+- **Knob targets:** a `MOD` flag in the engine's knob table, e.g.
+  `{"CUTOFF", F_PCT, 0, 127, 64, 0, 0, MOD}` (param_desc_t gains a flags field).
+- **Input targets:** a short list beside the knob table: name, range, what it drives.
+
+**The rules for MOD:** continuous (no F_ENUM or switch), heard while it moves, safe to move every control block
+(0.7 ms: no clicks, nothing re-initialised), and something a player would move within a phrase. Calibration and timing
+knobs (markers, LAG, VIB SWELL, KEYTRK, the envelope) are not offered.
+
+### The targets agreed
+
+| | Offered | Not offered |
+|---|---|---|
+| **Every layer** | LEVEL, PITCH, PAN, TONE A, TONE B, TONE C | ENGINE, MUTE, TRANSP, FINE, the envelope, TONE (type), QUIRKS, QUIRK SET |
+| **FM** | EXCITE (INDEX), FEEDBK, DETUNE, AIR, LP CUT | RATIO, KEYTRK, LP RES |
+| **ANALOG** | EXCITE, CUT, RES, DRV, NOIS, MIX, DTN | WAVE, KTR |
+| **ERS** | EXCITE (BLOW), COLOR, BRIGHT, AMOUNT, AIR, TILT, VIB, LP CUT | EXCITER, RESONATOR, SHAPER, DECAY, RATE, TONGUE, PR>PITCH, LAG, DRIFT, VIB SWELL, LP RES |
+| **EVA** | EXCITE (BREATH), CUTOFF, RES, SHAPE, VOWEL, FORMANT, VIB, TREM, RATE, WAVE MOD (new) | WAVE, FILTER, S.E.D., SWEEP, KEYTRK, CHIFF, LAG, VIB SWELL |
+| **PANFLUTE** | EXCITE (his breath), LIP (his bend), WOBBLE (his tilt input), LFO DEPTH, RATE | PP, MF, FF, REST, SEMI LO, SEMI HI, FULL, CENTRE |
+| **Effects** (later, a grid of their own on the FX pages) | DRIVE, DELAY MIX, REVERB MIX | the rest |
+
+**Amount scales:**
+
+- A cell's AMOUNT is −100 .. +100 %.
+- On a knob target, 100 % with the source at full moves the knob across its whole range.
+- On PITCH, 100 % is G_BEND's range. BEND's DEAD, RANGE and INVERT apply first.
+- Sources are 0 .. 1. BEND is −1 .. +1.
+
+## Hidden links removed from the engines
+
+The rule: **an engine reads no source.** Where an engine follows breath today in a way that is a synth's shortcut,
+not its physics, the parameter becomes a plain target. Converted presets get the cell that keeps their sound. Each
+item is a change to an engine's code, done and listed one by one (as `engines/pan/denis/CHANGES.md` is), so a
+changed sound can be traced.
+
+| Engine | Hidden now | Becomes | Converted presets get |
+|---|---|---|---|
+| EVA | VIB and TREM only above 55 % breath (EVA_VIB_ONSET), deeper blown harder | VIB, TREM plain depths | A→VIB, A→TREM |
+| EVA | the vibrato faster blown harder | RATE plain | A→RATE |
+| EVA | SHAPE's drive more with breath | SHAPE plain | A→SHAPE |
+| EVA | each wave's breath-driven detail: BR PWM's width, HARMONIC's count, SYNC's ratio, SUPERSAW's spread, NS_TUNED's width (s->zw) | a new knob target WAVE MOD | A→WAVE MOD |
+| ERS | VIB only above 55 % of a full tone's pressure | VIB plain | A→VIB |
+| ERS, FM | the breath low-pass: BR>LP | LP CUT a target; the BR>LP knob goes | A→LP CUT |
+| layer | BR>AMP, BR>TONE, BR>SHP | the knobs go | A→LEVEL, A→TONE A, A→EXCITE |
+| FX (later) | DRIVE past DRV AT | DRV AT goes | AO→DRIVE (A's OVER = the old DRV AT) |
+| PANFLUTE | BEND CC, VIB CC, VIB MODE, VIB DEPTH | the knobs go; LIP, WOBBLE, LFO DEPTH targets | B→LIP etc. by the preset |
+
+**What a converted preset loses:** a linear A→VIB cannot reproduce the 55 % onset, so soft notes get a little
+vibrato. Listen for it. If it is missed, the fix is a per-cell START (below), or AO→VIB where A's OVER sits near
+there.
+
+**What stays inside EXCITE** (the model's physics, documented as what EXCITE means in each engine):
+
+- ERS: the pressure overblowing the tone, the air noise growing with the pressure, PR>PITCH, the growl's flutter, the
+  free reed's swing.
+- PANFLUTE: his whole pressure model, including the PP / MF / FF markers.
+- EVA: S.E.D.'s split of the excitation into level and filter, and CHIFF as loud as the excitation.
+
+Any source can still be routed to other targets on top of these.
+
+## The grid (per layer: HOME)
+
+HOME's breath page (BR>AMP, BR>TONE, BR>SHP) becomes the layer's grid:
+
+```
+ LAYER 1  EVA         BND A  AO  B  C
+ LEVEL                 .  ●  .   .  .
+ PITCH                 ●  .  .   .  .
+ EXCITE                .  ●  .   .  .
+ CUTOFF                .  .  .   ◐  .
+ VIB                   .  .  .   ●  .
+ SHAPE                 .  .  ●   .  .
+ ────────────────────────────────────
+ B → VIB   +80 %
+ K1 row   K2 column   K3 amount   K4 —
+```
+
+- **Rows:** the layer's targets (the common ones, then the engine's).
+- **Columns:** the sources assigned in GLO (an unassigned source, or an XO with OVER OFF, has no column).
+- **Cells:** a dot sized and coloured by its amount (another colour for negative); the cell under the cursor is
+  written out at the bottom.
+- **One to many:** a column with several dots. **Many to one:** a row with several; the cells add.
+- **The knobs:**
+  - K1: the row;
+  - K2: the column;
+  - K3: the amount (0 removes the cell);
+  - K4: free, kept for a per-cell START if it is wanted.
+- **Scrolling:** 10 to 16 rows fit at ~12 px; more scroll.
+- **A new layer starts with A→EXCITE 100 % and BEND→PITCH 100 %**, so it plays at once. Both are visible and removable
+  (PANFLUTE moves BEND to LIP).
+
+## Storage
+
+- **Cells are per preset, pooled across its layers:** up to **32** a preset, 3 bytes each:
+  - layer (2 bits) and target (6 bits);
+  - source (4 bits: BEND, A .. D, AO .. DO);
+  - amount (int8, −100 .. +100).
+- **They fit in the record:** the 512-byte preset record already has a fourth layer row (4 x 48 values stored, 3 used):
+  96 bytes = 32 cells, so the record's size and the flash layout do not change. PS_VER 5.
+- **Target numbers are stable per engine** (like ENG_ID_*): new targets are appended, never renumbered.
+- **GLO's sources** go in the global state (STATE_MAGIC bumped; the old BREATH CC, CURVE, SMOOTH and TILT>BEND values
+  are carried into A and BEND).
+
+## Running it
+
+- **Once per control block (CTL, 32 samples),** per layer:
+  1. read the sources (after curve, SMOOTH, OVER);
+  2. copy the layer's p[] to a scratch copy on the stack (~84 bytes);
+  3. add each cell's source x amount to its target;
+  4. pass the copy to the engine.
+
+  The engine reads p[] as now, and its inputs (EXCITE, LIP, WOBBLE) from the vmod.
+- **RAM:** the cells of the current preset (96 bytes) and the sources' state (a few dozen bytes), in typhoon's ~0.9 KB
+  free. Nothing per sample.
+- **PANFLUTE (core 2)** takes its inputs at the audio block's start, as now.
+
+## Converting old presets (PS_VER 4 → 5, on load)
+
+| Old | New |
+|---|---|
+| BR>AMP n | A→LEVEL |
+| BR>TONE n | A→TONE A (the TONE stage's cutoff) |
+| BR>SHP n, and the engine's breath input | A→EXCITE |
+| EVA, ERS: the hidden links (table above) | their cells |
+| ERS, FM BR>LP | A→LP CUT |
+| PANFLUTE BEND CC / VIB CC | cells from the matching source (the CC assigned to a source in GLO), or none |
+| the preset's own CURVE group | dropped (curves are global) |
+
+The factory presets (core/factory.h) are written in the new form directly.
+
+## Tests
+
+- **A MOD flag on a switch** (F_ENUM, F_ONOFF) fails the build's check.
+- **No engine source file reads breath, src_breath or cc_raw** (a grep in the sim tests).
+- **A converted preset of each engine sounds the same:** the level, the pitch and the spectrum over a breath swell, old
+  record against new, within a tolerance. The EVA vibrato onset is the known exception, tested on its own.
+- **B→VIB:** vibrato with breath held soft, none with B at 0.
+- **AO:** zero below OVER, 127 at the top, A unchanged.
+- **The web editor** (web/editor, tsx.mjs tables) shows and edits the grid and the CONTROLS page.
+
+## The order of work
+
+1. **Sources:** GLO CONTROLS, curves per source, SMOOTH, OVER; breath moved into A, tilt into BEND. The sound
+   unchanged.
+2. **The grid:** cells, storage (PS_VER 5), the HOME page, applying cells per block, the MOD flags and input lists.
+3. **The engines:**
+   - the hidden links out, one change at a time, each listed;
+   - BR>AMP, BR>TONE, BR>SHP, BR>LP and PANFLUTE's routing knobs removed;
+   - old presets converted;
+   - the factory presets rewritten;
+   - the web editor.
+4. **Later:**
+   - the effects' grid (DRIVE, DELAY MIX, REVERB MIX; DRV AT into A's OVER);
+   - new curve types;
+   - CENTRE for A .. D;
+   - a per-cell START;
+   - an LFO as a source, which would retire every engine's own vibrato knobs (EVA VIB, RATE, TREM, VIB SWELL; ERS VIB,
+     RATE, VIB SWELL; PANFLUTE RATE).
