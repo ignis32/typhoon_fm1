@@ -162,6 +162,7 @@ static void midi_send(uint32_t st, uint32_t d1, uint32_t d2)
                                                     * second core's jobs, cpu2_job: before the engines, PAN's) */
 #include "engines/engines.h"
 #include "core/tone.c"
+#include "core/routes.c"                           /* (the routes: sources -> a layer's targets, HOME's grid) */
 #include "core/layers.c"
 #include "core/leap.c"
 #include "core/fx.c"

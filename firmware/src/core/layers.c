@@ -14,10 +14,9 @@
  *   - transpose (G_XPOSE): taken when a note starts; the main loop cuts the sounding note when it changes
  *     (perf_cut: a short fade), so a note is never moved under the player. Notes are kept by the number that
  *     came in, so the note-off of a note held across a change still finds it.
- *   - per layer: the loudness follows breath (rising at P_ATK's speed) while the note is held, fades at P_REL
- *     after it; P_BR_AMP says how much of it is breath. Breath opens the engine's own filter (P_BR_FLT,
- *     vmod.cutoff) and moves its shape (P_BR_SHP, vmod.shape), so every engine answers breath without code of
- *     its own.
+ *   - per layer: the volume envelope while the note is held, its release after it; the routes (core/routes.c, HOME's
+ *     grid) do the rest: a source's share of the level (LEVEL), the bend (PITCH: BEND -> PITCH on every layer by
+ *     default), EXCITE (vmod.shape: what breath moves in the engine), the knobs they move. No engine reads a source.
  *   - then the mix: drive, the breath low-pass, delay, reverb (core/fx.c fx_block).
  * The UI reads perf_ui (note, breath, levels): written here, read there, no lock needed for a meter. */
 
@@ -60,8 +59,6 @@ static struct {
     int8_t xpose;                                  /* G_XPOSE as the note started */
     int32_t raw[NSRC_CC];                          /* A .. D: the last controller value, Q15 */
     int32_t breath;                                /* A, Q15 (src_val[SRC_A]: what the layers and the effects take) */
-    int32_t bend16;                                /* 1/16 semitone */
-    int32_t bend_fine;                             /* and the rest, as m.fine (1/4096 of the increment, ~0.42 cent) */
     uint32_t blocks, t_cc2;                        /* block counter, when A's controller last came (0: never) */
 } pf = {.note = 60};
 
@@ -290,14 +287,8 @@ static void notes_event(const pev_t *ev)
         if (!ev->a)
             pf.t_cc2 = pf.blocks | 1u;
         break;
-    case EV_BEND:
-        {   /* in 1/1600 semitone (1/16 cent; 8192 x 24 x 1600 fits): 1/16 semitones, the rest as fine tuning, so a
-             * small bend (the tilt's: 10 % of 2 st) moves smoothly, not in 6.25-cent steps */
-            int32_t c16 = ((((int32_t)ev->b << 7 | ev->a) - 8192) * gpar[G_BEND] * 1600) / 8192;
-            pf.bend16 = c16 / 100;
-            pf.bend_fine = CENTS16_FINE(c16 - pf.bend16 * 100);
-            src_val[SRC_BEND] = clamp(((((int32_t)ev->b << 7 | ev->a) - 8192) * 4), -32768, 32767);
-        }
+    case EV_BEND:                                  /* the source BEND, Q15 (a layer's PITCH route makes it a bend) */
+        src_val[SRC_BEND] = clamp(((((int32_t)ev->b << 7 | ev->a) - 8192) * 4), -32768, 32767);
         break;
     }
 }
@@ -386,7 +377,9 @@ static void layers_block(int32_t *outl, int32_t *outr, uint32_t cb)
         const int16_t *p = t->p;
         const engine_t *e;
         vmod_t m;
-        int32_t target, a0, lev = p[P_LEVEL], qfine = 0, qgain = 32768;
+        route_t rt;
+        int16_t orig[P_COUNT];                     /* (the knobs as they were, while the routes move them) */
+        int32_t a0, lev = p[P_LEVEL], qfine = 0, qgain = 32768, bend16, bfine;
         uint32_t base;
         if (p[P_ENGINE] == ENG_ID_OFF) {           /* no engine: silent, nothing rendered */
             if (lay[l].id != ENG_ID_OFF) {
@@ -420,6 +413,7 @@ static void layers_block(int32_t *outl, int32_t *outr, uint32_t cb)
             v->active = 0;
             continue;
         }
+        routes_apply(l, e, &rt, orig);             /* (the routes: the knobs they move, moved for this block) */
         if (e->block)
             e->block(t);                           /* (also with no voice sounding: the interface says so) */
         if (p[P_MUTE] && v->gate) {                /* muted: it fades out as after a note (P_REL), no click */
@@ -432,13 +426,13 @@ static void layers_block(int32_t *outl, int32_t *outr, uint32_t cb)
             lay[l].amp = 0;
             perf_ui.amp[l] = 0;
             v->active = 0;
+            routes_restore(l, &rt, orig);
             continue;
         }
-        /* the volume: the envelope, times how much of it is breath (P_BR_AMP: 0 none, the default) */
+        /* the volume: the envelope, times the sources' share of it (routes to LEVEL: none by default) */
         env_step(&lay[l].env, p, v->gate, lay[l].cut);
-        target = 32767 - ((32767 - pf.breath) * p[P_BR_AMP]) / 127;
         a0 = lay[l].amp;
-        lay[l].amp = (int32_t)(mul64(lay[l].env.lev, target) >> 15);
+        lay[l].amp = (int32_t)(mul64(lay[l].env.lev, rt.gain) >> 15);
         if (!v->gate && lay[l].env.st == ENV_OFF) { /* faded out */
             lay[l].amp = 0;
             v->active = 0;
@@ -447,21 +441,24 @@ static void layers_block(int32_t *outl, int32_t *outr, uint32_t cb)
         v->env = lay[l].amp << 9;                  /* Q24, for engines that read it */
         v->env_out = lay[l].amp;
         layer_pitch(t, v);                         /* (TRANS may have moved) */
-        base = pitch_inc((uint32_t)clamp(v->pitch16 + pf.bend16, 0, 2047));
+        bend16 = rt.c16 / 100;                     /* (the routes to PITCH: 1/16 semitones, the rest as fine tuning, so
+                                                    * a small bend, the tilt's, moves smoothly, not in 6.25-cent steps) */
+        bfine = CENTS16_FINE(rt.c16 - bend16 * 100);
+        base = pitch_inc((uint32_t)clamp(v->pitch16 + bend16, 0, 2047));
         memset(&m, 0, sizeof m);
         if (p[P_QUIRKS])
             layer_quirk(p, &qfine, &qgain);        /* (this fingering's own pitch and level) */
-        m.pitch16 = v->pitch16 + pf.bend16;
-        m.fine = CENTS_FINE(p[P_FINE]) + pf.bend_fine + qfine;   /* cents -> 1/4096 of the increment; the bend's
-                                                    * rest; the quirk */
+        m.pitch16 = v->pitch16 + bend16;
+        m.fine = CENTS_FINE(p[P_FINE]) + bfine + qfine;   /* cents -> 1/4096 of the increment; the bend's rest; the
+                                                    * quirk */
         m.inc = base + (uint32_t)((int32_t)(base >> 12) * m.fine);
         m.amp0 = a0;
         m.amp1 = lay[l].amp;
         if (e->amp)
             m.amp1 = e->amp(t, v, m.amp1);         /* (LOFI's stepped envelope) */
         m.envq15 = m.amp1;
-        m.cutoff = (pf.breath * p[P_BR_FLT]) >> 7;
-        m.shape = (64 << 8) + ((pf.breath * p[P_BR_SHP]) >> 7);
+        m.cutoff = 0;                              /* (BR>TONE's until 2026-10-30: a route on the knob now) */
+        m.shape = (64 << 8) + ((rt.excite * 63) >> 7);   /* EXCITE (100 %: BR>SHP's 63, all of it) */
         perf_ui.amp[l] = m.amp1;
         m.off = cb * CTL;
         if (e->audio) {                            /* rendered on core 2 meanwhile: its chain in the second pass */
@@ -469,9 +466,11 @@ static void layers_block(int32_t *outl, int32_t *outr, uint32_t cb)
             lblk.cb[cb].qgain = qgain;
             lblk.cb[cb].br = pf.breath;
             lblk.cb[cb].on = 1;
+            routes_restore(l, &rt, orig);
             continue;
         }
         layer_out(l, e, &m, qgain, pf.breath, outl, outr);
+        routes_restore(l, &rt, orig);
     }
 }
 

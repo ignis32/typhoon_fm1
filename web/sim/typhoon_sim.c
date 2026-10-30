@@ -167,8 +167,10 @@ EXPORT_AS(sim_own) uint32_t sim_own(void) { return s_own; }  /* bit GR_*: the pr
 EXPORT_AS(sim_page) void sim_page(uint32_t pg) { host_page(pg); }
 EXPORT_AS(sim_layer_amp) uint32_t sim_layer_amp(uint32_t l) { return l < NLAYER ? (uint32_t)perf_ui.amp[l] : 0; }
 EXPORT_AS(sim_page_cur) uint32_t sim_page_cur(void) { return ui.page; }
-EXPORT_AS(sim_bend16) int32_t sim_bend16(void) { return pf.bend16; }   /* the bend now, 1/16 semitone */
-EXPORT_AS(sim_bend_fine) int32_t sim_bend_fine(void) { return pf.bend_fine; }
+/* the bend now, as a layer's BEND -> PITCH 100 % makes it (core/routes.c): 1/16 semitone, and the rest as m.fine */
+static int32_t sim_bend_c16(void) { return src_val[SRC_BEND] * gpar[G_BEND] * 1600 / 32768; }
+EXPORT_AS(sim_bend16) int32_t sim_bend16(void) { return sim_bend_c16() / 100; }
+EXPORT_AS(sim_bend_fine) int32_t sim_bend_fine(void) { return CENTS16_FINE(sim_bend_c16() - sim_bend_c16() / 100 * 100); }
 /* Bluetooth (fm1-base's host stand-in: "BLE MIDI" found half a second into a scan, connected 0.3 s after; app/ble.c):
  * 0 plat_ble_state, 1 plat_ble_device, 2 advertising wanted (plat_ble_advertise), 3 a computer connected, 4 the list
  * up, 5 its entry */

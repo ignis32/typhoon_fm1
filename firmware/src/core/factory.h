@@ -41,7 +41,7 @@ static const factory_t FACTORY[] = {
                SND(S_REV_PRE, 35), SND(S_VOLUME, 86)}},                                                             /* 17 */
     {"RECORDER", {ENG(0, ENG_ID_ERS, 19), SND(S_REV_MIX, 30), SND(S_REV_TYPE, 1)}},                                 /* 18 */
     {"VOX FLUTE", {ENG(0, ENG_ID_EVA, 5), PAR(0, P_E9, 13), ENG(1, ENG_ID_FM, 0), PAR(1, P_LEVEL, 43),
-               PAR(1, P_BR_SHP, 10), PAR(1, P_E0, 12), PAR(1, P_E2, 0), PAR(1, P_E4, 30), PAR(1, P_E5, 0),
+               CEL(1, SRC_A, T_EXCITE, 16), PAR(1, P_E0, 12), PAR(1, P_E2, 0), PAR(1, P_E4, 30), PAR(1, P_E5, 0),
                SND(S_REV_MIX, 40), SND(S_VOLUME, 127)}},                                                            /* 19 */
     {"TIN WHISTLE", {ENG(0, ENG_ID_ERS, 35), SND(S_DLY_MIX, 15), SND(S_REV_MIX, 28), SND(S_VOLUME, 127)}},          /* 20 */
     {"OCARINA", {ENG(0, ENG_ID_ERS, 34), SND(S_REV_MIX, 30), SND(S_VOLUME, 127)}},                                  /* 21 */

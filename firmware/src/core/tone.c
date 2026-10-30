@@ -3,9 +3,10 @@
 /* TONE: a stage after every layer's engine, before its level and pan (core/layers.c layers_block): for an ERS layer
  * the fourth stage after its shaper (E -> R -> S -> T), for any other engine a tone of its own. Breath-driven tone, as
  * wind-controller players use it. P_TONE picks it, P_TONE_A .. C are its knobs (their labels follow the type:
- * tone_desc); BR>TONE (P_BR_FLT, breath -> tone) moves FILTER's cutoff too.
+ * tone_desc); the knobs marked MOD are routes' targets (core/routes.c: FILTER and SWEEP come with A -> CUTOFF 31 %,
+ * BR>TONE's until 2026-10-30).
  *   OFF      the engine as it is
- *   FILTER   a resonant filter: CUTOFF (+ breath x BR>TONE), RES, MODE (LP BP HP)
+ *   FILTER   a resonant filter: CUTOFF, RES, MODE (LP BP HP)
  *   SWEEP    a low-pass that opens by how fast breath rises, not how much (the EWI4000s's sweep): every attack bites
  *            bright and settles to CUTOFF; DEPTH, SPEED (how fast it settles)
  *   TALK     a talkbox: three vowel formants, the vowel moved by breath: VOWEL (where soft breath is, U O A E I),
@@ -25,7 +26,7 @@ static const char *const N_TONE_MODE[3] = {"LP", "BP", "HP"};
                                                     * each fired the accent (a "brbrbr" flutter at soft breath, where the
                                                     * filter rests under the note). 15 ms is under a step's 20 and inside
                                                     * a tongued attack's own ~40 ms ramp. Only the accent's bite is
-                                                    * spread so; the level and BR>TONE answer breath at once */
+                                                    * spread so; the level and the routes answer breath at once */
 
 static struct {
     uint8_t type;                                  /* the type the state is for */
@@ -40,14 +41,14 @@ static const param_desc_t *tone_desc(int32_t type, uint32_t k)
 {
     static const param_desc_t D[TN_COUNT][3] = {
         [TN_OFF] = {{"-", F_INT, 0, 0, 0, 0, 0}, {"-", F_INT, 0, 0, 0, 0, 0}, {"-", F_INT, 0, 0, 0, 0, 0}},
-        [TN_FILTER] = {{"CUTOFF", F_CUTOFF, 0, 127, 80, 0, 0}, {"RES", F_PCT, 0, 127, 40, 0, 0},
+        [TN_FILTER] = {{"CUTOFF", F_CUTOFF, 0, 127, 80, 0, 0, MOD}, {"RES", F_PCT, 0, 127, 40, 0, 0, MOD},
                        {"MODE", F_ENUM, 0, 2, 0, N_TONE_MODE, 0}},
-        [TN_SWEEP] = {{"CUTOFF", F_CUTOFF, 0, 127, 50, 0, 0}, {"DEPTH", F_PCT, 0, 127, 90, 0, 0},
+        [TN_SWEEP] = {{"CUTOFF", F_CUTOFF, 0, 127, 50, 0, 0, MOD}, {"DEPTH", F_PCT, 0, 127, 90, 0, 0},
                       {"SPEED", F_PCT, 0, 127, 60, 0, 0}},
-        [TN_TALK] = {{"VOWEL", F_PCT, 0, 127, 20, 0, 0}, {"DEPTH", F_BIPCT, -64, 63, 40, 0, 0},
-                     {"RES", F_PCT, 0, 127, 70, 0, 0}},
-        [TN_SUB] = {{"LEVEL", F_PCT, 0, 127, 70, 0, 0}, {"BREATH", F_PCT, 0, 127, 40, 0, 0},
-                    {"WAVE", F_PCT, 0, 127, 20, 0, 0}},
+        [TN_TALK] = {{"VOWEL", F_PCT, 0, 127, 20, 0, 0, MOD}, {"DEPTH", F_BIPCT, -64, 63, 40, 0, 0},
+                     {"RES", F_PCT, 0, 127, 70, 0, 0, MOD}},
+        [TN_SUB] = {{"LEVEL", F_PCT, 0, 127, 70, 0, 0, MOD}, {"BREATH", F_PCT, 0, 127, 40, 0, 0},
+                    {"WAVE", F_PCT, 0, 127, 20, 0, 0, MOD}},
     };
     return &D[(uint32_t)clamp(type, 0, TN_COUNT - 1)][k % 3u];
 }

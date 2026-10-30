@@ -6,7 +6,7 @@ export default function (t) {
   const { ex, C, L1, SG, G, check, run, freq } = t;
   ex.sim_preset(255);
   ex.sim_par_set(SG(C.S_REV_MIX), 0);               // (a dry sine, for the pitch: no reverb, breath leaves 2ND alone)
-  ex.sim_par_set(L1(C.P_BR_SHP), 0);
+  ex.sim_par_set(t.CELL(0, C.SRC_A, C.T_EXCITE), 0);
   t.note(69, 300);
   const f0 = freq(300);
   ex.sim_par_set(G(C.G_XPOSE), 3);

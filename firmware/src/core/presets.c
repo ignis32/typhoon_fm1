@@ -52,12 +52,13 @@ typedef struct {
     uint8_t reserved[PS_SLOT - 28u - PS_NL * PS_NP * 2u - PS_NCELL * 3u - PS_NS * 2u];
 } ps_rec_t;
 _Static_assert(sizeof(ps_rec_t) == PS_SLOT, "preset record layout");
-_Static_assert(NLAYER <= PS_NL && P_COUNT <= PS_NP && S_COUNT <= PS_NS && NGROUP <= 8u, "preset record: room");
+_Static_assert(NLAYER <= PS_NL && P_COUNT <= PS_NP && S_COUNT <= PS_NS && NGROUP <= 8u && NCELL == PS_NCELL &&
+               NTARGET == T_KNOB + NEPAR && NTARGET <= 64u && NLAYER <= 3u, "preset record: room (a cell: 2 bits of layer, 6 of target)");
 _Static_assert(2u * PS_COPY <= 16u * 0x1000u && PS_HI_AT + 2u * PS_HI_COPY <= STORE_LEN && NPRESET % PS_PER_SEC == 0u,
                "presets: the store (sector 16 is the BT stack's)");
 
 /* ---- the factory presets: changes to the INIT sound, in order (an engine before its layer's parameters) */
-enum { FP_END, FP_ENG, FP_PAR, FP_SND };
+enum { FP_END, FP_ENG, FP_PAR, FP_SND, FP_CELL };
 typedef struct { uint8_t op, l, i; int16_t v; } fp_t;
 #define FACTORY_OPS 48                             /* a preset's changes, its end among them (tools/factory_from_backup.mjs
                                                     * keeps to it; 24 until 2026-10-29) */
@@ -65,12 +66,15 @@ typedef struct { const char *name; fp_t f[FACTORY_OPS]; } factory_t;
 #define ENG(l, id, pre) {FP_ENG, (l), (id), (pre)}   /* layer l plays engine id, with that engine's preset pre */
 #define PAR(l, i, v) {FP_PAR, (l), (i), (v)}
 #define SND(i, v) {FP_SND, 0, (i), (v)}              /* the preset owns i's group, i = v */
+#define CEL(l, s, t, a) {FP_CELL, (l), (t), (int16_t)((s) << 8 | ((a) & 0xFF))}   /* a route: source s -> layer l's
+                                                    * target t at a % (0: none; core/routes.c) */
 /* the table itself: core/factory.h, made from the user's own presets (2026-10-29: the 26 kept of 92; the others, and
  * their comments, in git history before it) */
 #include "factory.h"
 #undef ENG
 #undef PAR
 #undef SND
+#undef CEL
 #define NFACTORY ((uint32_t)NELEM(FACTORY))
 
 static struct { char name[PS_NAME + 1]; uint8_t user; } ps_ix[NPRESET];   /* every slot's name (the browser) */
@@ -166,12 +170,42 @@ static void factory_apply(uint32_t k)
         }
         case FP_PAR:
             trk[l].p[f[j].i] = f[j].v;
+            if (f[j].i == P_TONE)                  /* (a TONE's routes: core/routes.c routes_tone) */
+                routes_tone(l, f[j].v);
             break;
         case FP_SND:
             group_own(S_GROUP[f[j].i]);
             sown[f[j].i] = f[j].v;
             break;
+        case FP_CELL:
+            cell_set(l, f[j].i, (uint32_t)f[j].v >> 8 & 15u, (int8_t)(f[j].v & 0xFF));
+            break;
         }
+    }
+}
+
+/* the routes as a record or the state keep them (3 bytes each: layer << 6 | target, source, amount), and back */
+static void cells_put(uint8_t (*c)[3])
+{
+    uint32_t i;
+    for (i = 0; i < NCELL; i++) {
+        c[i][0] = cells[i].lt;
+        c[i][1] = cells[i].src;
+        c[i][2] = (uint8_t)cells[i].amt;
+    }
+}
+static void cells_get(const uint8_t (*c)[3])
+{
+    uint32_t i;
+    for (i = 0; i < NCELL; i++) {
+        int8_t a = (int8_t)c[i][2];
+        cells[i].amt = 0;
+        if (!a || (c[i][0] >> 6) >= NLAYER || (c[i][0] & 63u) >= NTARGET || c[i][1] >= NSRC || a < -100 || a > 100)
+            continue;                              /* (none, or nothing this build knows) */
+        cells[i].lt = c[i][0];
+        cells[i].src = c[i][1];
+        RING_PUBLISH();
+        cells[i].amt = a;
     }
 }
 
@@ -185,6 +219,7 @@ static void ps_apply(const ps_rec_t *r)
         for (i = 0; i < NEPAR && nc + i < r->np && nc + i < PS_NP; i++)
             trk[l].p[P_E0 + i] = r->p[l][nc + i];
     }
+    cells_get(r->cell);
     for (i = 0; i < S_COUNT; i++)
         sown[i] = i < r->ns && i < PS_NS ? r->s[i] : sglob[i];
     s_own = (uint8_t)(r->own & ((1u << NGROUP) - 1u));
@@ -272,6 +307,7 @@ static int ps_save(uint32_t k)
         ps_new.name[j] = ps.name[j];
     for (l = 0; l < NLAYER; l++)
         memcpy(ps_new.p[l], trk[l].p, sizeof trk[l].p);
+    cells_put(ps_new.cell);
     memcpy(ps_new.s, sown, sizeof sown);
     ps_new.crc = ps_crc((const uint8_t *)&ps_new + 8, PS_SLOT - 8u);
     if ((rc = ps_put(k, &ps_new)) != 0)
@@ -330,6 +366,7 @@ static void state_load(void)
         for (i = 0; i < NEPAR; i++)
             trk[n].p[P_E0 + i] = s->p[n][nc + i];
     }
+    cells_get(s->cell);
     s_own = (uint8_t)(s->own & ((1u << NGROUP) - 1u));
     ps.cur = (uint8_t)(s->cur % NPRESET);
     ps_edited = s->edited ? 1u : 0u;
@@ -355,6 +392,7 @@ static void state_save(void)
     memcpy(s->so, sown, sizeof sown);
     for (n = 0; n < NLAYER; n++)
         memcpy(s->p[n], trk[n].p, sizeof trk[n].p);
+    cells_put(s->cell);
     for (j = 0; j < PS_NAME && ps.name[j]; j++)
         s->name[j] = ps.name[j];
     settings_save(s, sizeof *s);

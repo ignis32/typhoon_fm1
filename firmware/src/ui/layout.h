@@ -18,7 +18,7 @@
  * Where a page is, the header says (ui.c): the preset (number, name, * when edited) and the layer on layer pages;
  * on SP pages whether the preset uses the GLOBAL group or its OWN; SG pages are the global ones (an amber bar). */
 
-enum { UK_KNOBS, UK_CURVE, UK_FOLLOW, UK_BT, UK_PERF };
+enum { UK_KNOBS, UK_CURVE, UK_FOLLOW, UK_BT, UK_PERF, UK_GRID };   /* (UK_GRID: the layer's routes, ui.c draw_grid) */
 typedef struct {
     const char *title;
     uint8_t kind, eng_page, next;
@@ -37,9 +37,9 @@ enum {
 };
 #define PG_STAY 0xFFu
 static const ui_page_t PAGES[NPAGES] = {
-    [PG_BREATH] = {"BREATH", UK_KNOBS, 0, PG_STAY, {L(P_BR_AMP), L(P_BR_FLT), L(P_BR_SHP), PR_NONE}},   /* (HOME: how the
-                                                  * layer follows breath; the mix's BREATH LP until 2026-10-28, now
-                                                  * ERS's and FM's EDIT 5) */
+    [PG_BREATH] = {"ROUTES", UK_GRID, 0, PG_STAY, {PR_NONE, PR_NONE, PR_NONE, PR_NONE}},   /* (HOME: the layer's routes,
+                                                  * a grid: KNOB 1 the target, 2 the source, 3 the amount; ui.c. BR>AMP,
+                                                  * BR>TONE, BR>SHP until 2026-10-30) */
     [PG_ENG1] = {0, UK_KNOBS, 1, PG_ENG2, {L(P_E0), L(P_E1), L(P_E2), L(P_E3)}},
     [PG_ENG2] = {0, UK_KNOBS, 2, PG_ENG3, {L(P_E4), L(P_E5), L(P_E6), L(P_E7)}},
     [PG_ENG3] = {0, UK_KNOBS, 3, PG_ENG4, {L(P_E8), L(P_E9), L(P_E10), L(P_E11)}},   /* (EDIT 3, 4: passed by when empty) */
@@ -52,12 +52,13 @@ static const ui_page_t PAGES[NPAGES] = {
     [PG_REVERB] = {"REVERB", UK_KNOBS, 0, PG_REVERB2, {SP(S_REV_SIZE), SP(S_REV_DECAY), SP(S_REV_DAMP), SP(S_REV_MIX)}},
     [PG_REVERB2] = {"REVERB +", UK_KNOBS, 0, PG_DRIVE, {SP(S_REV_TYPE), SP(S_REV_PRE), PR_NONE, PR_NONE}},
     [PG_ENV] = {"ENVELOPE", UK_FOLLOW, 0, PG_ENV2, {L(P_ATK), L(P_DEC), L(P_SUS), L(P_REL)}},
-    [PG_ENV2] = {"ENVELOPE +", UK_FOLLOW, 0, PG_ENV, {L(P_DELAY), L(P_BR_AMP), PR_NONE, PR_NONE}},
+    [PG_ENV2] = {"ENVELOPE +", UK_FOLLOW, 0, PG_ENV, {L(P_DELAY), PR_NONE, PR_NONE, PR_NONE}},   /* (BR>AMP until
+                                                  * 2026-10-30: a route, A -> LEVEL) */
     [PG_LAYER] = {"LAYER", UK_KNOBS, 0, PG_LAYER2, {L(P_ENGINE), L(P_LEVEL), L(P_TRANS), L(P_PAN)}},
     [PG_QUIRKS] = {"QUIRKS", UK_KNOBS, 0, PG_LAYER, {L(P_QUIRKS), L(P_QSET), PR_NONE, PR_NONE}},   /* (each fingering
                                                   * its own pitch and level: core/layers.c layer_quirk) */
-    [PG_LAYER2] = {"LAYER +", UK_KNOBS, 0, PG_QUIRKS, {L(P_BR_FLT), L(P_BR_SHP), L(P_FTYPE), L(P_FINE)}},   /* ("BREATH"
-                                                  * until 2026-10-28: HOME's page is now) */
+    [PG_LAYER2] = {"LAYER +", UK_KNOBS, 0, PG_QUIRKS, {L(P_FTYPE), L(P_FINE), PR_NONE, PR_NONE}},   /* (BR>TONE, BR>SHP
+                                                  * until 2026-10-30: routes, HOME's grid) */
     [PG_MIX] = {"MIX", UK_KNOBS, 0, PG_STAY, {LN(0, P_LEVEL), LN(1, P_LEVEL), LN(2, P_LEVEL), SP(S_VOLUME)}},
     [PG_GLOBAL] = {"GLOBAL", UK_KNOBS, 0, PG_BT, {G(G_BEND), G(G_XPOSE), PR_NONE, PR_NONE}},   /* (KNOB 4: Bluetooth
                                                   * until 2026-10-24, now on its own page; KNOB 1 LOUDNESS until

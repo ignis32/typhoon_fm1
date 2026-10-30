@@ -25,9 +25,8 @@ enum {
     P_TRANS, P_FINE, P_PAN,
     P_ATK, P_REL,                    /* the volume envelope's attack and release (env_ms: 0 .. ~4 s) */
     P_FTYPE,                         /* filter type, for engines that have one (ANALOG): LP BP HP */
-    P_BR_AMP,                        /* breath -> loudness: 0 = the note at full level, 127 = all breath */
-    P_BR_FLT,                        /* breath -> the engine's own filter / brightness (vmod.cutoff), bipolar */
-    P_BR_SHP,                        /* breath -> shape (vmod.shape: PWM, colour, 2ND ...), bipolar */
+                                     /* (P_BR_AMP, P_BR_FLT, P_BR_SHP were here until 2026-10-30: breath -> loudness,
+                                      * filter, shape; the routes now, core/routes.c: A -> LEVEL, the knob, EXCITE) */
     P_DELAY, P_DEC, P_SUS,           /* the volume envelope (with P_ATK, P_REL): delay, decay, sustain level. Restarts on a
                                       * fresh attack only (legato runs on): a layer can come in late (a pad), or only
                                       * at the start (a chiff of noise) */
@@ -66,6 +65,24 @@ static int32_t src_breath;
 enum { SRC_BEND, SRC_A, SRC_B, SRC_C, SRC_D, SRC_AO, SRC_BO, SRC_CO, SRC_DO, NSRC };
 #define NSRC_CC 4u                                 /* A .. D: a controller each */
 static int32_t src_val[NSRC];
+
+/* the routes (core/routes.c, notes/05-controls.md): a cell is a source -> a layer's target, an amount -100 .. +100 %;
+ * one source to many targets, many to one (they add). The preset's, up to NCELL, each in a slot (amt 0: a free one).
+ * Targets: the layer's own (T_LEVEL .. T_EXCITE), then an engine knob each (T_KNOB + k: P_E0 + k, its descriptor's
+ * MOD says whether it is offered). Numbers are stable: new ones go before T_KNOB's room or after it, never between */
+enum {
+    T_LEVEL,                         /* the source's share of the level (BR>AMP's: 100 % all of it, -100 % less as it rises) */
+    T_PITCH,                         /* semitones, 100 % = GLOBAL's BEND range at a full source (BEND +-1) */
+    T_PAN,                           /* the knob PAN, moved */
+    T_TONE_A, T_TONE_B, T_TONE_C,    /* TONE's knobs, moved (the ones its type marks MOD) */
+    T_EXCITE,                        /* what breath moves in the engine (vmod.shape: FM's index, ERS's pressure, EVA's
+                                      * slots, ANALOG's PWM): 100 % = the old BR>SHP 63, all of it */
+    T_KNOB = 16,                     /* + k: the engine's knob P_E0 + k, moved */
+    NTARGET = 36                     /* (T_KNOB + 20 knobs; a number: tools/consts.mjs reads it) */
+};
+#define NCELL 32u
+typedef struct { uint8_t lt, src; int8_t amt; } cell_t;   /* lt: layer << 6 | target */
+static cell_t cells[NCELL];
 
 /* the sound's parameters (global, or the preset's own: see the top). New ones go at the end (presets map by index) */
 enum {

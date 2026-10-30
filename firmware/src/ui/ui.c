@@ -30,6 +30,7 @@ static struct {
     uint32_t touched_k, t_touched;                 /* the knob turned last, when (its value shows white) */
     uint8_t full;
     uint8_t src_sel;                               /* CONTROLS: the source turned last (0 .. 3: A .. D): EDIT opens its curve */
+    uint8_t grid_r, grid_c;                        /* HOME's grid: the cursor's row and column */
     uint8_t solo, solo_mutes[NLAYER];              /* UA_SOLO on: the mutes as they were before */
     uint8_t last[NELEM(BUTTONS)];                  /* a page button: its cycle's page shown last, + 1 (0: none) */
     uint32_t t_down[NELEM(BUTTONS)];               /* a button with a hold: pressed when (0: not pending) */
@@ -154,6 +155,8 @@ static int32_t page_group(uint32_t pg, int *global)
 static int page_on_layer(uint32_t pg)              /* edits the current layer (L knobs): the header says which */
 {
     uint32_t k;
+    if (PAGES[pg].kind == UK_GRID)                 /* (the layer's routes) */
+        return 1;
     for (k = 0; k < 4u; k++)
         if (pr_layer(PAGES[pg].k[k]) && ((PAGES[pg].k[k] >> 8) & 0x0Fu) == PR_SEL)
             return 1;
@@ -194,6 +197,60 @@ static int knob_live(pref_t r)                     /* has a range (engines mark 
 {
     const param_desc_t *d = par_desc(r);
     return d && d->max > d->min;
+}
+
+/* ---- HOME's grid: the layer's routes (core/routes.c). Rows: its targets, LEVEL, PITCH, PAN, EXCITE (when its engine
+ * has one), TONE's knobs and the engine's knobs that are MOD. Columns: the sources, BEND, A .. D when assigned
+ * (GLO > CONTROLS), an XO when its OVER is on, and any source a route of the layer uses. KNOB 1 the row, 2 the
+ * column, 3 the amount; the cell under the cursor written out below */
+static const char *const SRC_NAME[NSRC] = {"BEND", "A", "B", "C", "D", "AO", "BO", "CO", "DO"};
+static const char *const SRC_COL[NSRC] = {"PB", "A", "B", "C", "D", "AO", "BO", "CO", "DO"};
+static uint32_t grid_rows(uint32_t l, uint8_t *t)
+{
+    uint32_t n = 0, k;
+    uint8_t miss;
+    const param_desc_t *d;
+    int on = trk[l].p[P_ENGINE] != ENG_ID_OFF;
+    t[n++] = T_LEVEL;
+    t[n++] = T_PITCH;
+    t[n++] = T_PAN;
+    if (on && ENGINES[eng_index((uint32_t)trk[l].p[P_ENGINE], &miss)].excite)
+        t[n++] = T_EXCITE;
+    for (k = 0; k < 3u; k++) {
+        d = tone_desc(trk[l].p[P_TONE], k);
+        if (d->mod && d->max > d->min)
+            t[n++] = (uint8_t)(T_TONE_A + k);
+    }
+    for (k = 0; on && k < NEPAR; k++) {
+        d = par_desc(LN(l, P_E0 + k));
+        if (d && d->mod && d->max > d->min && d->label[0] != '-')   /* ("-": a knob this choice does not use) */
+            t[n++] = (uint8_t)(T_KNOB + k);
+    }
+    return n;
+}
+static uint32_t grid_cols(uint32_t l, uint8_t *s)
+{
+    uint32_t n = 0, k, i;
+    for (k = 0; k < NSRC; k++) {
+        int show = k == SRC_BEND || (k >= SRC_A && k <= SRC_D && gpar[G_CC_A + k - SRC_A]) ||
+                   (k >= SRC_AO && gpar[G_CC_A + k - SRC_AO] && gpar[G_OVER_A + k - SRC_AO]);
+        for (i = 0; i < NCELL && !show; i++)
+            show = cells[i].amt && cells[i].src == k && cell_l(&cells[i]) == l;
+        if (show)
+            s[n++] = (uint8_t)k;
+    }
+    return n;
+}
+static void grid_label(uint32_t l, uint32_t t, char *buf)   /* a row's name */
+{
+    static const char *const N[] = {"LEVEL", "PITCH", "PAN", "", "", "", "EXCITE"};
+    if (t >= T_TONE_A && t <= T_TONE_C) {
+        put_str(buf, "TONE ");
+        put_str(buf + 5, tone_desc(trk[l].p[P_TONE], t - T_TONE_A)->label);
+    } else if (t >= T_KNOB)
+        put_str(buf, par_desc(LN(l, P_E0 + t - T_KNOB))->label);
+    else
+        put_str(buf, N[t]);
 }
 
 /* EDIT 3 .. EDIT 5 of an engine with no knobs there: the EDIT button passes them by */
@@ -364,6 +421,23 @@ static void ui_input(void)
         if (st && ui.page == PG_PERF && k == 0u) {   /* KNOB 1: the worst and the xruns start again */
             cpum_reset();
             ui_msg("RESET");
+            continue;
+        }
+        if (st && PAGES[ui.page].kind == UK_GRID) {   /* the grid: KNOB 1 the row, 2 the column, 3 the amount */
+            uint8_t rows[NTARGET], cols[NSRC];
+            uint32_t l = (uint32_t)gpar[G_LAYER], nr = grid_rows(l, rows), nc = grid_cols(l, cols);
+            if (k == 0u)
+                ui.grid_r = (uint8_t)clamp((int32_t)ui.grid_r + st, 0, (int32_t)nr - 1);
+            else if (k == 1u)
+                ui.grid_c = (uint8_t)clamp((int32_t)ui.grid_c + st, 0, (int32_t)nc - 1);
+            else if (k == 2u && ui.grid_r < nr && ui.grid_c < nc) {
+                pref_t r = CELL(CELL_SEL, cols[ui.grid_c], rows[ui.grid_r]);
+                int32_t was = par_get(r);
+                par_step(r, st);
+                if (par_get(r) == was && !was)
+                    ui_msg("ROUTES FULL");       /* (NCELL a preset) */
+            }
+            ui.drawn_dirty = par_dirty - 1u;       /* (the cursor moved: drawn again) */
             continue;
         }
         if (st && ui.page == PG_CONTROLS)
@@ -770,6 +844,75 @@ static void draw_curve_knobs(void)                 /* (the knob row under a grap
     }
 }
 
+/* HOME's grid (the layer's routes): the sources across (FONT_XS), the targets down (FONT_S, GRID_ROWS at a time,
+ * scrolled to the cursor), a cell a dot, bigger with its amount (cyan up, orange down), the cursor a frame; below,
+ * the cursor's route in words */
+#define GRID_ROWS 7
+#define GRID_RH 18                                 /* a row's height */
+#define GRID_X0 116                                /* the first column's left edge */
+static void draw_grid(void)
+{
+    uint8_t rows[NTARGET], cols[NSRC];
+    uint32_t l = (uint32_t)gpar[G_LAYER], nr = grid_rows(l, rows), nc = grid_cols(l, cols), i, j, first;
+    int32_t cw = nc ? (234 - GRID_X0) / (int32_t)nc : 0, x, y, a, sz;
+    char s[40], v[12];
+    ui.grid_r = (uint8_t)(ui.grid_r < nr ? ui.grid_r : nr - 1u);
+    ui.grid_c = (uint8_t)(ui.grid_c < nc ? ui.grid_c : nc - 1u);
+    first = ui.grid_r < GRID_ROWS / 2u ? 0u : ui.grid_r - GRID_ROWS / 2u;
+    if (nr > GRID_ROWS && first > nr - GRID_ROWS)
+        first = nr - GRID_ROWS;
+    if (nr <= GRID_ROWS)
+        first = 0;
+    TP_BOX(240, 182, C_BLACK) {
+    for (j = 0; j < nc; j++) {                     /* the sources */
+        x = GRID_X0 + (int32_t)j * cw + cw / 2;
+        cv_text(x - text_w(&FONT_XS, SRC_COL[cols[j]]) / 2, 2, &FONT_XS, SRC_COL[cols[j]],
+                j == ui.grid_c ? C_WHITE : C_GRAY);
+    }
+    if (first)                                     /* (more above, more below) */
+        cv_text(3, 20, &FONT_XS, "^", C_DIM);
+    if (first + GRID_ROWS < nr)
+        cv_text(3, 20 + (GRID_ROWS - 1) * GRID_RH, &FONT_XS, "v", C_DIM);
+    for (i = 0; i < GRID_ROWS && first + i < nr; i++) {
+        uint32_t r = first + i;
+        y = 18 + (int32_t)i * GRID_RH;
+        grid_label(l, rows[r], s);
+        fit(s, GRID_X0 - 14);
+        cv_text(14, y, &FONT_S, s, r == ui.grid_r ? C_WHITE : C_GRAY);
+        for (j = 0; j < nc; j++) {
+            x = GRID_X0 + (int32_t)j * cw + cw / 2;
+            a = cell_get(l, rows[r], cols[j]);
+            if (!a)
+                cv_rect(x - 1, y + 8, 2, 2, C_LINE);
+            else {
+                sz = 4 + (a < 0 ? -a : a) * 8 / 100;   /* 4 .. 12 px */
+                cv_rect(x - sz / 2, y + 9 - sz / 2, sz, sz, a > 0 ? C_HI : RGB(255, 120, 50));
+            }
+            if (r == ui.grid_r && j == ui.grid_c) {   /* the cursor */
+                cv_rect(x - cw / 2 + 1, y, cw - 2, 1, C_WHITE);
+                cv_rect(x - cw / 2 + 1, y + GRID_RH - 2, cw - 2, 1, C_WHITE);
+                cv_rect(x - cw / 2 + 1, y, 1, GRID_RH - 1, C_WHITE);
+                cv_rect(x + cw / 2 - 2, y, 1, GRID_RH - 1, C_WHITE);
+            }
+        }
+    }
+    if (nr && nc) {                                /* the cursor's route: "A > EXCITE  +100 %" */
+        put_str(s, SRC_NAME[cols[ui.grid_c]]);
+        put_str(s + par_strlen(s), " > ");
+        grid_label(l, rows[ui.grid_r], s + par_strlen(s));
+        a = cell_get(l, rows[ui.grid_r], cols[ui.grid_c]);
+        if (a)
+            put_str(put_int(v, a, 1), " %");
+        else
+            put_str(v, "-");
+        fit(s, 230 - text_w(&FONT_S, v) - 12);
+        cv_text(6, 154, &FONT_S, s, C_GRAY);
+        cv_text(234 - text_w(&FONT_S, v), 154, &FONT_S, v, a ? C_WHITE : C_DIM);
+    }
+    cv_blit(0, 58 + tp_box.top);
+    }
+}
+
 #include "page_bt.c"                                 /* (the BLUETOOTH page) */
 #include "page_perf.c"                               /* (the PERFORMANCE page) */
 
@@ -834,7 +977,9 @@ static void ui_draw(void)
             else
                 draw_follow();
             draw_curve_knobs();
-        } else if (pg->kind == UK_BT)
+        } else if (pg->kind == UK_GRID)
+            draw_grid();
+        else if (pg->kind == UK_BT)
             draw_bt();
         else if (pg->kind == UK_PERF)
             draw_perf();

@@ -41,21 +41,24 @@ enum { ENG_ID_OFF = 0, ENG_ID_SINE = 1, ENG_ID_ANALOG = 2, ENG_ID_NOISE = 3, ENG
 #include "pan/eng_pan.c"                   /* Denis Rosset's pan flute (MIT, pan/denis/), on the second core */
 #endif
 
-static const struct { uint8_t id; int8_t br_shp; const engine_t *e; } ENGINES[] = {
+/* each engine's routes when a layer takes it (core/routes.c routes_engine): A -> EXCITE at br_shp % (0: none), and A
+ * -> its knob br_knob at 31 % (-1: none: the knob the layer's BR>TONE +40 moved until 2026-10-30, vmod.cutoff). excite:
+ * the engine has an EXCITE (vmod.shape), offered on the grid */
+static const struct { uint8_t id; int8_t br_shp, br_knob; uint8_t excite; const engine_t *e; } ENGINES[] = {
 #if TYPHOON_ENG_FM
-    {ENG_ID_FM, 40, &ENG_FM},              /* (first: the INIT sound, what a missing engine plays) */
+    {ENG_ID_FM, 63, -1, 1, &ENG_FM},       /* (first: the INIT sound, what a missing engine plays; BR>SHP 40 was 63 %) */
 #endif
 #if TYPHOON_ENG_ANALOG
-    {ENG_ID_ANALOG, 0, &ENG_ANALOG},       /* (its SHAPE is PWM; breath works on its filter: BR>FLT) */
+    {ENG_ID_ANALOG, 0, 4, 1, &ENG_ANALOG}, /* (its EXCITE is PWM, none by default; breath works on its filter: CUT) */
 #endif
 #if TYPHOON_ENG_ERS
-    {ENG_ID_ERS, 63, &ENG_ERS},           /* (breath is the pressure: all of it) */
+    {ENG_ID_ERS, 100, 7, 1, &ENG_ERS},    /* (breath is the pressure: all of it; BR>TONE moved its shaper's AMOUNT) */
 #endif
 #if TYPHOON_ENG_EVA
-    {ENG_ID_EVA, 63, &ENG_EVA},           /* (breath: the slots, all of it) */
+    {ENG_ID_EVA, 100, -1, 1, &ENG_EVA},   /* (breath: the slots, all of it) */
 #endif
 #if TYPHOON_ENG_PAN
-    {ENG_ID_PAN, 0, &ENG_PAN},            /* (breath is his pressure, his own way: no shape) */
+    {ENG_ID_PAN, 0, -1, 0, &ENG_PAN},     /* (breath is his pressure, his own way: no EXCITE yet) */
 #endif
 };
 #define NENGINES ((uint32_t)NELEM(ENGINES))

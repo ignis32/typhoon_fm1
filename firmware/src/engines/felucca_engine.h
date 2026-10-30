@@ -62,7 +62,10 @@ typedef struct {
     int16_t min, max, def;
     const char *const *names;   /* F_ENUM */
     const char *unit;           /* F_INT / F_ENUM optional unit */
+    uint8_t mod;                /* typhoon: MOD, a route's target (core/routes.c, notes/05-controls.md): the sources may
+                                 * move it while playing (continuous, heard, safe every control block); 0: not offered */
 } param_desc_t;
+#define MOD 1
 
 /* ------------------------------------------------- voices, engines --- */
 typedef struct {

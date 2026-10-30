@@ -219,7 +219,8 @@ static void ers_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const v
 /* the labels follow the choices: what a knob does in this exciter / resonator / shaper */
 static const param_desc_t *ers_desc(const track_t *t, uint32_t k)
 {
-#define D(l, def) {l, F_PCT, 0, 127, def, 0, 0}
+#define D(l, def) {l, F_PCT, 0, 127, def, 0, 0, MOD}   /* (COLOR, BRIGHT, AMOUNT: routes' targets) */
+#define D0(l, def) {l, F_PCT, 0, 127, def, 0, 0}      /* (DECAY: not, the resonator's loss moved live) */
     static const char *const RATIO[8] = {"0.5", "1", "1.5", "2", "3", "4", "5", "7"};
     static const param_desc_t COLOR[ERS_NEXC] = {
         D("AIR", 30), D("STIFF", 30), D("WAVE", 30), D("PRESSURE", 30), D("LIPS", 30), D("STIFF", 30), D("BITE", 30),
@@ -227,8 +228,8 @@ static const param_desc_t *ers_desc(const track_t *t, uint32_t k)
     };
     enum { DC_EMB, DC_FB, DC_DECAY, DC_RES, DC_NONE, DC_POS, DC_VENT, DC_VOICE, DC_SUS };
     static const param_desc_t DECAY[9] = {
-        D("EMBOUCH", 50), D("FEEDBK", 50), D("DECAY", 50), D("RES", 50), D("-", 50), D("POSITN", 50), D("VENT", 50),
-        D("VOICING", 50), D("SUSTAIN", 50),
+        D0("EMBOUCH", 50), D0("FEEDBK", 50), D0("DECAY", 50), D0("RES", 50), D0("-", 50), D0("POSITN", 50),
+        D0("VENT", 50), D0("VOICING", 50), D0("SUSTAIN", 50),
     };
     static const param_desc_t BRIGHT[4] = {D("BRIGHT", 70), D("VOWEL", 70), D("-", 70), D("FREQ", 70)};
     static const param_desc_t AMOUNT[ERS_NSHP] = {
@@ -236,6 +237,7 @@ static const param_desc_t *ers_desc(const track_t *t, uint32_t k)
         D("BODY", 0), D("AIR", 0), D("GROWL", 0),
     };
 #undef D
+#undef D0
     int32_t exc = clamp(t->p[P_E1], 0, ERS_NEXC - 1), res = clamp(t->p[P_E3], 0, ERS_NRES - 1);
     int32_t model = ers_model(exc, res);
     switch (k) {
@@ -259,18 +261,18 @@ static const engine_t ENG_ERS = {
     .edit = {
         {"BLOW", F_PCT, 0, 127, 0, 0, 0},
         {"EXCITER", F_ENUM, 0, ERS_NEXC - 1, EX_NOISE, ERS_N_EXC, 0},
-        {"COLOR", F_PCT, 0, 127, 30, 0, 0},
+        {"COLOR", F_PCT, 0, 127, 30, 0, 0, MOD},
         {"RESONATOR", F_ENUM, 0, ERS_NRES - 1, RS_TUBE, ERS_N_RES, 0},
         {"DECAY", F_PCT, 0, 127, 50, 0, 0},
-        {"BRIGHT", F_PCT, 0, 127, 70, 0, 0},
+        {"BRIGHT", F_PCT, 0, 127, 70, 0, 0, MOD},
         {"SHAPER", F_ENUM, 0, ERS_NSHP - 1, SH_BYPASS, ERS_N_SHP, 0},
-        {"AMOUNT", F_PCT, 0, 127, 0, 0, 0},
-        {"VIB", F_PCT, 0, 127, 0, 0, 0},
+        {"AMOUNT", F_PCT, 0, 127, 0, 0, 0, MOD},
+        {"VIB", F_PCT, 0, 127, 0, 0, 0, MOD},
         {"RATE", F_PCT, 0, 127, 64, 0, 0},
         {"TONGUE", F_PCT, 0, 127, 0, 0, 0},
         {"LAG", F_PCT, 0, 127, 0, 0, 0},       /* (back 2026-10-28, visible: 0 none; gone 2026-10-23 .. 28) */
-        {"AIR", F_PCT, 0, 127, 64, 0, 0},
-        {"TILT", F_PCT, 0, 127, 64, 0, 0},
+        {"AIR", F_PCT, 0, 127, 64, 0, 0, MOD},
+        {"TILT", F_PCT, 0, 127, 64, 0, 0, MOD},
         {"PR>PITCH", F_PCT, 0, 127, 64, 0, 0},
         {"DRIFT", F_PCT, 0, 127, 0, 0, 0},
         BLP_KNOBS,                             /* EDIT 5: the breath LP (dsp/breathlp.c; the mix's until 2026-10-28) */

@@ -91,8 +91,8 @@ the slowest block in the last second; and WORST, the slowest since the reset. Al
 blocks not done in time since the reset, each heard as a click, and says how long ago the last one came. Turn KNOB 1
 to reset. Over USB: `tools/presets.py stats`.
 
-**The sound.** A preset is the whole sound: three layers (engine and its knobs, level, transpose, pan, envelope, how
-breath moves them) and a name. The sound after the layers (drive, detune, delay, reverb, volume) is in groups: each
+**The sound.** A preset is the whole sound: three layers (engine and its knobs, level, transpose, pan, envelope, its routes:
+what the sources do to it) and a name. The sound after the layers (drive, detune, delay, reverb, volume) is in groups: each
 has a **global** copy (the effects on REC; an amber header), and a preset uses it (values dim, a
 GLOBAL tag) until a knob is turned on the preset's page — then the group is the preset's **own** (OWN tag). Holding
 the page's button gives it back to the global one.
@@ -103,12 +103,12 @@ the page's button gives it back to the global one.
 | SELECT encoder | the layer 1-2-3 |
 | ALGORITHM encoder | the layer's engine (the last place: OFF) |
 | KNOB 1-4 | the page's four values |
-| HOME | BREATH: how the layer follows breath (BR>AMP, BR>TONE, BR>SHP). ERS's and FM's breath LP (cutoff, resonance, breath amount) is their EDIT 5 |
+| HOME | ROUTES, the layer's grid: what the sources do to it. Rows its targets (LEVEL: the source's share of the level, PITCH, PAN, EXCITE: what breath moves in the engine, TONE's knobs, the engine's knobs that may move), columns the sources (PB: BEND, the assigned A .. D, AO .. DO). KNOB 1 the row, 2 the column, 3 the amount (-100 .. +100 %); one source to many, many to one. A new layer: BEND → PITCH, and its engine's own (A → EXCITE, A → its filter) |
 | ENV | A's curve (the breath's) → A + (SMOOTH, A FROM) |
 | EDIT | the engine's knobs, page by page (EDIT 1 .. 5, the empty ones passed by) → TONE (after the engine: OFF, FILTER LP/BP/HP, SWEEP, TALK, SUB OCT) |
 | FX | DRIVE → DETUNE → DELAY → REVERB → REVERB + (TYPE: PLATE / HALL, PRE-DLY), again and again · hold: back to global |
-| LFO | ENVELOPE (per layer, drawn): ATTACK, DECAY, SUSTAIN, RELEASE → ENVELOPE + (DELAY, BR>AMP). Restarts on a fresh attack, legato runs on |
-| ARP | LAYER (engine, level, transpose, pan) → LAYER + (breath → tone / shape, filter type, fine) |
+| LFO | ENVELOPE (per layer, drawn): ATTACK, DECAY, SUSTAIN, RELEASE → ENVELOPE + (DELAY). Restarts on a fresh attack, legato runs on |
+| ARP | LAYER (engine, level, transpose, pan) → LAYER + (filter type, fine) |
 | SEQ | MIX: the 3 levels, each with its engine, and the preset's VOLUME (KNOB 4: the whole sound, effects too; 100 = as it is) · hold: VOLUME back to global |
 | GLO | the global settings: GLOBAL (bend range, transpose) → BLUETOOTH (BLE-P, BLE-C, the list, AUTO_RECONNECT) → BEND (the tilt's CC, DEAD, RANGE, INVERT) → CONTROLS (A .. D; EDIT: the one turned last's curve, then its +) → LEAPS → USB AUDIO → USB HOST → PERFORMANCE (load, xruns) · hold: GLOBAL TO FACTORY ? |
 | REC | the global effects: DRIVE → DETUNE → DELAY → REVERB → REVERB + (what a preset without its own group plays) · hold: all notes off |

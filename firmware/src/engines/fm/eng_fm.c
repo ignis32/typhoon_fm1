@@ -61,9 +61,9 @@ static const engine_t ENG_FM = {
     .edit = {
         {"INDEX", F_PCT, 0, 127, 40, 0, 0},
         {"RATIO", F_ENUM, 0, 7, 1, N_FM_RATIO, 0},
-        {"FEEDBK", F_PCT, 0, 127, 0, 0, 0},
-        {"DETUNE", F_INT, -50, 50, 0, 0, "ct"},
-        {"AIR", F_PCT, 0, 127, 10, 0, 0},
+        {"FEEDBK", F_PCT, 0, 127, 0, 0, 0, MOD},
+        {"DETUNE", F_INT, -50, 50, 0, 0, "ct", MOD},
+        {"AIR", F_PCT, 0, 127, 10, 0, 0, MOD},
         {"KEYTRK", F_PCT, 0, 127, 40, 0, 0},
         {"-", F_INT, 0, 0, 0, 0, 0}, {"-", F_INT, 0, 0, 0, 0, 0},
         [16] = BLP_KNOBS,                              /* EDIT 5: the breath LP (dsp/breathlp.c; the mix's until 2026-10-28) */

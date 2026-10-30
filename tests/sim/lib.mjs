@@ -5,7 +5,7 @@
 //   export default function (t) { t.check(ok, 'what') ... }   t: see boot() below
 import fs from 'fs';
 import { WASI } from 'node:wasi';
-import { C, LN, L, SP, SG, G } from '../../tools/consts.mjs';
+import { C, LN, L, SP, SG, G, CELL } from '../../tools/consts.mjs';
 
 let module;
 let fails = 0;
@@ -20,7 +20,7 @@ export function boot(wasm = process.env.SIM || 'build/sim/typhoon.wasm', quiet =
   const frames = (ms) => Math.round(ms * 44.1 / 128);
   const side = (k) => new Float32Array(ex.memory.buffer, k ? ex.sim_out_r() : ex.sim_out_l(), 128);
   const t = {
-    ex, C, LN, L, SP, SG, G,
+    ex, C, LN, L, SP, SG, G, CELL,
     L1: (p) => LN(0, p), L2: (p) => LN(1, p),
     check(ok, what) { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); if (!ok) fails++; },
     wait(ms) {                                      // ms of the device's own clock (sim_ms): the frames handed out may

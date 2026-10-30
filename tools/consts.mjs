@@ -47,6 +47,7 @@ export const L = (i) => (0x0F << 8) | i;               // the current layer's (P
 export const SP = (i) => 0x4000 | i;                   // the sound's i as the preset plays it (S_*)
 export const SG = (i) => 0xC000 | i;                   // its global copy
 export const G = (i) => 0x8000 | i;                    // a global (G_*)
+export const CELL = (n, s, t) => 0x2000 | (n << 10) | (s << 6) | t;   // a route: source s (SRC_*) -> layer n's target t (T_*); n 3: the current layer
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   const want = process.argv.slice(2);

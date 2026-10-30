@@ -59,6 +59,7 @@ export default function (t) {
   check(ok(g) && (g.data[0] >> C.GR_REVERB & 1) === 0 && get(SP(C.S_REV_MIX))[0] === get(SG(C.S_REV_MIX))[0],
     'editor GROUP 0: the reverb back to the global one');
   const before = state().slice(0, 4).join();
+  ex.sim_page(C.PG_ENG1); run(30);                  // (HOME is the routes' grid: its KNOB 1 moves a cursor)
   ex.sim_enc(C.ENC_KNOB1, 3); run(30);              // a knob on the device: the editor sees it in STATE
   check(state().slice(0, 4).join() !== before, 'editor STATE: moves when a knob is turned on the FM-1');
 

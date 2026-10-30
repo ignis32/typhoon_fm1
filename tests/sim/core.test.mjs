@@ -34,7 +34,7 @@ export default function (t) {
     const { G } = t;
     ex.sim_preset(255);
     ex.sim_par_set(SG(C.S_REV_MIX), 0);
-    ex.sim_par_set(L1(C.P_BR_AMP), 127);           // (loudness from breath only)
+    ex.sim_par_set(t.CELL(0, C.SRC_A, C.T_LEVEL), 100);           // (loudness from breath only)
     const level = (st, d1, d2) => { ex.sim_midi(st, d1, d2); run(300); return run(150); };
     ex.sim_midi(0x90, 69, 80);
     const def = t.breathCcDefault, cc2 = level(0xB0, 2, 110);
@@ -54,7 +54,7 @@ export default function (t) {
   // every engine of the build sounds on layer 1 with breath, and more breath is louder
   for (let e = 0; e < ex.sim_nengines(); e++) {
     ex.sim_par_set(L1(C.P_ENGINE), e);
-    ex.sim_par_set(L1(C.P_BR_AMP), 127);            // (the loudness follows breath; the default is 0)
+    ex.sim_par_set(t.CELL(0, C.SRC_A, C.T_LEVEL), 100);            // (the loudness follows breath; the default is 0)
     ex.sim_midi(0xB0, 2, 0);
     run(300);
     ex.sim_midi(0xB0, 2, 30); ex.sim_midi(0x90, 60, 80);
@@ -103,7 +103,7 @@ export default function (t) {
 
   // the breath curve's LOW below 0: a head start (a held note sounds with no breath at all)
   ex.sim_preset(255);
-  ex.sim_par_set(L1(C.P_BR_AMP), 127);              // (loudness from breath, to hear the head start)
+  ex.sim_par_set(t.CELL(0, C.SRC_A, C.T_LEVEL), 100);              // (loudness from breath, to hear the head start)
   ex.sim_par_set(SG(C.S_REV_MIX), 0);
   ex.sim_midi(0xB0, 2, 0); ex.sim_midi(0x90, 69, 80); run(400);
   const none = run(200);

@@ -1,6 +1,6 @@
 # Controls: sources, curves and the matrix (design, 2026-10-30)
 
-Status: agreed design, not built yet. When a part is built, mark it here and keep this file the reference.
+Status: stage 1 (the sources) and stage 2 (the routes, HOME's grid) built 2026-10-30; stage 3 (the engines' hidden links, PANFLUTE) next. Keep this file the reference.
 
 ## Why
 

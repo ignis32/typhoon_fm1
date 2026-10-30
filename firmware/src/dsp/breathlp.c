@@ -11,7 +11,7 @@ typedef struct {
 } blp_t;
 
 /* the defaults, the mix's BREATH LP's: CUT 60 (~580 Hz), RES 20, BR>LP +40 (open from ~84 % breath) */
-#define BLP_KNOBS {"LP CUT", F_CUTOFF, 0, 127, 60, 0, 0}, {"LP RES", F_PCT, 0, 127, 20, 0, 0}, \
+#define BLP_KNOBS {"LP CUT", F_CUTOFF, 0, 127, 60, 0, 0, MOD}, {"LP RES", F_PCT, 0, 127, 20, 0, 0}, \
                   {"BR>LP", F_BIPCT, -64, 63, 40, 0, 0}
 
 static void blp_block(blp_t *f, int32_t *x, int32_t cut0, int32_t res, int32_t br_lp, int32_t breath)   /* CTL frames */

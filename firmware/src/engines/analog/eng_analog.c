@@ -12,8 +12,8 @@
  *         sub oscillator's level */
 static const char *const N_ANALOG_WAVE[] = {"SAW", "SQR", "TRI", "SIN", "PWM", "SYNC", "SUB"};
 enum { AW_SYNC = 5, AW_SUB = 6 };
-static const param_desc_t ANALOG_SYNC = {"SYNC", F_INT, 0, 127, 10, 0, 0};   /* DTN's range and default */
-static const param_desc_t ANALOG_SUB = {"SUB", F_PCT, 0, 127, 64, 0, 0};      /* MIX's */
+static const param_desc_t ANALOG_SYNC = {"SYNC", F_INT, 0, 127, 10, 0, 0, MOD};   /* DTN's range and default */
+static const param_desc_t ANALOG_SUB = {"SUB", F_PCT, 0, 127, 64, 0, 0, MOD};      /* MIX's */
 
 /* the filter's TYPE (1.5, #104: track parameter P_FTYPE, EDIT > FILTER; ANALOG's 8 values are full): the SVF's
  * outputs (dsp.c tsvf_lp, written out here with the taps: Simper's trapezoidal state-variable filter), 0 LP the
@@ -216,12 +216,12 @@ static const engine_t ENG_ANALOG = {
     .page_title = {"OSC", "FLT"},
     .edit = {
         {"WAVE", F_ENUM, 0, 6, 0, N_ANALOG_WAVE, 0},
-        {"DTN", F_INT, 0, 127, 10, 0, "ct"},
-        {"MIX", F_PCT, 0, 127, 64, 0, 0},
-        {"NOIS", F_PCT, 0, 127, 0, 0, 0},
-        {"CUT", F_CUTOFF, 0, 127, 90, 0, 0},
-        {"RES", F_PCT, 0, 127, 30, 0, 0},
-        {"DRV", F_PCT, 0, 127, 0, 0, 0},
+        {"DTN", F_INT, 0, 127, 10, 0, "ct", MOD},
+        {"MIX", F_PCT, 0, 127, 64, 0, 0, MOD},
+        {"NOIS", F_PCT, 0, 127, 0, 0, 0, MOD},
+        {"CUT", F_CUTOFF, 0, 127, 90, 0, 0, MOD},
+        {"RES", F_PCT, 0, 127, 30, 0, 0, MOD},
+        {"DRV", F_PCT, 0, 127, 0, 0, 0, MOD},
         {"KTR", F_PCT, 0, 127, 64, 0, 0},
     },
     .presets = ANALOG_PRESETS,

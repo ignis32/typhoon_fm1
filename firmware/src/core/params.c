@@ -10,20 +10,26 @@
  *                group the preset's OWN (copied from the global one first, so nothing jumps)
  *   SG(S_x)      a sound parameter's GLOBAL copy (the GLO pages): every preset that uses the group follows it
  *   G(G_x)       a global parameter
- * Descriptors are Felucca-Engines' param_desc_t: label, format (F_*), min, max, default, value names, unit. */
+ *   CELL(n, s, t) a route (core/routes.c): source s (SRC_*) -> layer n's target t (T_*), its amount -100 .. 100 %, 0
+ *                none; n CELL_SEL: the layer the UI is on. Setting one where the preset has no room left does nothing
+ * Descriptors are Felucca-Engines' param_desc_t: label, format (F_*), min, max, default, value names, unit, MOD. */
 
 typedef uint16_t pref_t;
 #define PR_GLOBAL 0x8000u
 #define PR_SND 0x4000u
+#define PR_CELL 0x2000u
 #define PR_SEL 0x0Fu                                /* "the layer the UI is on" */
+#define CELL_SEL 3u
 #define G(i) ((pref_t)(PR_GLOBAL | (i)))
 #define SP(i) ((pref_t)(PR_SND | (i)))
 #define SG(i) ((pref_t)(PR_GLOBAL | PR_SND | (i)))
 #define L(i) ((pref_t)(PR_SEL << 8 | (i)))
 #define LN(n, i) ((pref_t)((n) << 8 | (i)))
+#define CELL(n, s, t) ((pref_t)(PR_CELL | (n) << 10 | (s) << 6 | (t)))
 #define PR_NONE ((pref_t)0xFFFFu)
-static int pr_layer(pref_t r) { return r != PR_NONE && !(r & (PR_GLOBAL | PR_SND)); }
+static int pr_layer(pref_t r) { return r != PR_NONE && !(r & (PR_GLOBAL | PR_SND | PR_CELL)); }
 static int pr_snd(pref_t r) { return r != PR_NONE && (r & PR_SND); }   /* SP or SG */
+static int pr_cell(pref_t r) { return r != PR_NONE && (r & (PR_GLOBAL | PR_SND | PR_CELL)) == PR_CELL; }
 
 static const char *const N_FTYPE[] = {"LP", "BP", "HP"};
 static const char *const N_BSRC[] = {"AUTO", "CC", "VEL"};   /* (A: its controller, else velocity; the controller only;
@@ -43,14 +49,10 @@ static const param_desc_t COMMON[NCOMMON] = {
     [P_MUTE] = {"MUTE", F_ONOFF, 0, 1, 0, 0, 0},
     [P_TRANS] = {"TRANSP", F_SEMI, -24, 24, 0, 0, 0},
     [P_FINE] = {"FINE", F_INT, -50, 50, 0, 0, "ct"},
-    [P_PAN] = {"PAN", F_BIPCT, -64, 63, 0, 0, 0},
-    [P_ATK] = {"ATTACK", F_TIME, 0, 127, 0, 0, "E"},     /* (0 and BR>AMP 0: no lag in
-                                                           * staccato; the loudness follower is for extra layers) */
+    [P_PAN] = {"PAN", F_BIPCT, -64, 63, 0, 0, 0, MOD},   /* (a route's target: core/routes.c T_PAN) */
+    [P_ATK] = {"ATTACK", F_TIME, 0, 127, 0, 0, "E"},     /* (0: no lag in staccato) */
     [P_REL] = {"RELEASE", F_TIME, 0, 127, 50, 0, "E"},   /* (unit "E": an envelope time, env_ms) */
     [P_FTYPE] = {"F.TYPE", F_ENUM, 0, 2, 0, N_FTYPE, 0},
-    [P_BR_AMP] = {"BR>AMP", F_PCT, 0, 127, 0, 0, 0},
-    [P_BR_FLT] = {"BR>TONE", F_BIPCT, -64, 63, 40, 0, 0},
-    [P_BR_SHP] = {"BR>SHP", F_BIPCT, -64, 63, 0, 0, 0},
     [P_DELAY] = {"DELAY", F_TIME, 0, 127, 0, 0, "E"},
     [P_DEC] = {"DECAY", F_TIME, 0, 127, 64, 0, "E"},
     [P_SUS] = {"SUSTAIN", F_PCT, 0, 127, 127, 0, 0},
@@ -145,9 +147,11 @@ static uint8_t ps_edited;                          /* the preset changed since i
 
 static uint32_t par_layer(pref_t r)
 {
-    uint32_t n = (r >> 8) & 0x0Fu;
-    return n == PR_SEL ? (uint32_t)gpar[G_LAYER] : n % NLAYER;
+    uint32_t n = pr_cell(r) ? (r >> 10) & 3u : (r >> 8) & 0x0Fu;
+    return n == (pr_cell(r) ? CELL_SEL : PR_SEL) ? (uint32_t)gpar[G_LAYER] : n % NLAYER;
 }
+static uint32_t cell_src(pref_t r) { return (r >> 6) & 15u; }
+static uint32_t cell_tgt(pref_t r) { return r & 63u; }
 
 static const engine_t *layer_engine(uint32_t n)
 {
@@ -164,6 +168,10 @@ static const param_desc_t *par_desc(pref_t r)
         return i < S_COUNT ? &SOUND[i] : 0;
     if (r & PR_GLOBAL)
         return i < G_COUNT ? &GLOBAL[i] : 0;
+    if (pr_cell(r)) {                              /* a route's amount */
+        static const param_desc_t ROUTE = {"ROUTE", F_INT, -100, 100, 0, 0, "%"};
+        return cell_src(r) < NSRC && cell_tgt(r) < NTARGET ? &ROUTE : 0;
+    }
     if (i >= P_TONE_A && i <= P_TONE_C)            /* (TONE's knobs mean what its type says) */
         return tone_desc(trk[par_layer(r)].p[P_TONE], i - P_TONE_A);
     if (i < NCOMMON)
@@ -191,6 +199,8 @@ static int32_t par_get(pref_t r)
         return i < S_COUNT ? ((r & PR_GLOBAL) ? sglob[i] : sv(i)) : 0;
     if (r & PR_GLOBAL)
         return i < G_COUNT ? gpar[i] : 0;
+    if (pr_cell(r))
+        return cell_get(par_layer(r), cell_tgt(r), cell_src(r));
     return i < P_COUNT ? trk[par_layer(r)].p[i] : 0;
 }
 
@@ -219,8 +229,8 @@ static void group_global(uint32_t g)
     par_dirty++;
 }
 
-/* a layer's engine: the id, its sixteen parameters back to that engine's defaults, and how much breath moves its
- * first knob (engines.h br_shp) */
+/* a layer's engine: the id, its knobs back to that engine's defaults, its routes to the engine (EXCITE, the knobs) the
+ * engine's defaults (core/routes.c routes_engine: what breath moves in it) */
 static void layer_set_engine(uint32_t n, uint32_t idx)
 {
     const engine_t *e;
@@ -232,7 +242,7 @@ static void layer_set_engine(uint32_t n, uint32_t idx)
     e = ENGINES[idx].e;
     for (k = 0; k < NEPAR; k++)
         trk[n].p[P_E0 + k] = e->edit[k].def;
-    trk[n].p[P_BR_SHP] = ENGINES[idx % NENGINES].br_shp;
+    routes_engine(n, idx);
     trk[n].p[P_ENGINE] = ENGINES[idx % NENGINES].id;
 }
 
@@ -265,6 +275,13 @@ static void par_set(pref_t r, int32_t v)
         return;
     }
     v = clamp(v, d->min, d->max);
+    if (pr_cell(r)) {                              /* a route (no room left: nothing) */
+        if (v != par_get(r) && !cell_set(par_layer(r), cell_tgt(r), cell_src(r), v)) {
+            ps_edited = 1;
+            par_dirty++;
+        }
+        return;
+    }
     if (r & PR_SND) {
         if (!(r & PR_GLOBAL)) {
             if (v == sv(i))
@@ -279,8 +296,10 @@ static void par_set(pref_t r, int32_t v)
         p = &trk[par_layer(r)].p[i];
     if (*p != v) {
         *p = (int16_t)v;
-        if (pr_layer(r) && i == P_TONE)            /* another TONE: its knobs at its defaults */
+        if (pr_layer(r) && i == P_TONE) {          /* another TONE: its knobs at its defaults, its routes its own */
             tone_defaults(trk[par_layer(r)].p);
+            routes_tone(par_layer(r), v);
+        }
         if (!(r & PR_GLOBAL))
             ps_edited = 1;
         par_dirty++;
@@ -414,6 +433,7 @@ static void layers_defaults(void)                  /* the layers of a new preset
     for (n = 0; n < NLAYER; n++) {
         for (i = 0; i < NCOMMON; i++)
             trk[n].p[i] = COMMON[i].def;
+        routes_layer(n, 0);                        /* (BEND -> PITCH, the first engine's routes) */
         layer_set_engine(n, 0);                    /* (the first engine's knobs, for whatever comes) */
         if (n)
             layer_set_engine(n, NENGINES);         /* OFF, at full level: an engine picked there plays at once */
@@ -421,7 +441,7 @@ static void layers_defaults(void)                  /* the layers of a new preset
     /* the sine: ENGINES[0] is FM (engines.h); no index, no air, breath not on the index (SINE's, until 2026-10-28) */
     trk[0].p[P_E0 + 0] = 0;                        /* INDEX */
     trk[0].p[P_E0 + 4] = 0;                        /* AIR */
-    trk[0].p[P_BR_SHP] = 0;
+    cell_set(0, T_EXCITE, SRC_A, 0);
     s_own = 0;
 }
 

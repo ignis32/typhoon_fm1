@@ -29,7 +29,7 @@ export default function (t) {
   ex.sim_par_set(G(C.G_SMOOTH_A), 40);
   ex.sim_preset(0); ex.sim_preset(64); ex.sim_preset(255);
   check(ex.sim_par_get(G(C.G_SMOOTH_A)) === 40, 'SMOOTH: loading presets leaves it alone (no preset has its own)');
-  const sine = () => ex.sim_par_set(L1(C.P_BR_AMP), 127);   // (INIT's sine, its loudness all breath)
+  const sine = () => ex.sim_par_set(t.CELL(0, C.SRC_A, C.T_LEVEL), 100);   // (INIT's sine, its loudness all breath)
   ex.sim_par_set(G(C.G_SMOOTH_A), 0);
   const s0 = rise(sine);
   ex.sim_par_set(G(C.G_SMOOTH_A), 5);
