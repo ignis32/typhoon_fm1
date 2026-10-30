@@ -18,8 +18,8 @@ factory presets; the only delay presets carry is the vibrato's swell. Last check
 | 3 | Bluetooth, BLE-P (a computer the central) | the computer's interval | macOS / iOS ~11-15 ms; the FM-1 asks (le_midi.c connection_param_table) | no | the computer decides |
 | 4 | Bluetooth in (radio.c) | notes and CCs at once; only clock / start / stop held to the sender's timestamps | 0 for notes | — | fine |
 | 5 | USB MIDI | polled 2 kHz | 0.5 ms | — | fine |
-| 6 | breath in: SMOOTH (G_BSMOOTH, GLO > BREATH IN) | a one-pole on the breath CC | 0 ms by default (5 until 2026-10-24, 20 until 2026-10-23) | knob | fine at 0 |
-| 7 | breath in: the CURVE | shape only | 0 | knobs | fine |
+| 6 | the sources A .. D: SMOOTH (G_SMOOTH_A .., GLO > CONTROLS > EDIT > EDIT; breath's G_BSMOOTH until 2026-10-30) | a one-pole on the source's controller | 0 ms by default (breath's 5 until 2026-10-24, 20 until 2026-10-23) | knob, each source | fine at 0; a source set over 0 is a delay on all it moves |
+| 7 | the sources: the curve, OVER | shape only; AO .. DO derived at once | 0 | knobs | fine |
 | 8 | LEAPS HOLD (core/leap.c) | an upward slurred jump of OVER semitones or more waits up to WAIT for the next note (the thumb's passing notes) | 30 ms, only those jumps | knobs (LEAPS OFF: none) | by design; watch if leaps feel late |
 | 9 | control rate | breath, pitch, levels updated each block of CTL 32 samples, interpolated within | 0.7 ms | — | fine |
 | 10 | layer: ENVELOPE ATTACK | the level's rise on a tongued note | 0 by default; no factory preset has one | knob | fine |

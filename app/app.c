@@ -213,22 +213,30 @@ static uint32_t tilt_bend(uint32_t cc)
 }
 
 /* MIDI in, from USB, TRS or Bluetooth (any channel) */
-static uint32_t t_cc2;                             /* CC2 came last when (the key LEDs' breath bar) */
+static uint32_t t_cc2;                             /* A's controller came last when (the key LEDs' breath bar) */
 static void midi_in(uint32_t st, uint32_t d1, uint32_t d2)
 {
     uint32_t ty = st & 0xF0u;
+    uint32_t s, took = 0;
     if (ty == 0xB0u)
         cc_raw[d1 & 127u] = (uint8_t)d2;           /* (every controller as it came: core/layers.h, an engine's sources) */
-    if (ty == 0xB0u && gpar[G_TILT_CC] && d1 == (uint32_t)gpar[G_TILT_CC]) {   /* the tilt: a bend instead */
+    for (s = 0; s < NSRC_CC; s++) {                /* the sources A .. D (GLO > CONTROLS): a CC, or aftertouch (128) */
+        int32_t cc = gpar[G_CC_A + s];
+        if ((ty == 0xB0u && cc > 0 && cc < 128 && d1 == (uint32_t)cc) || (ty == 0xD0u && cc == 128)) {
+            perf_src(s, ty == 0xD0u ? d1 : d2);
+            if (!s)
+                t_cc2 = fm1_ms | 1u;               /* (A: the key LEDs' breath bar) */
+            took = 1;
+        }
+    }
+    if (ty == 0xB0u && gpar[G_TILT_CC] && d1 == (uint32_t)gpar[G_TILT_CC]) {   /* the tilt: BEND (a source may take
+                                                    * the same controller too: the rotation is BEND and B) */
         uint32_t pb = tilt_bend(d2);
         perf_bend(pb & 0x7Fu, pb >> 7);
-        return;
+        took = 1;
     }
-    if ((ty == 0xB0u && d1 == (uint32_t)gpar[G_BREATH_CC]) || (ty == 0xD0u && gpar[G_BREATH_CC] == 128)) {
-        perf_breath(ty == 0xD0u ? d1 : d2);        /* breath: the BREATH CC (CC2 by default), or aftertouch */
-        t_cc2 = fm1_ms | 1u;
-        return;
-    }
+    if (took)
+        return;                                    /* (a source's controller is no knob's: CC_MAP) */
     if (ty == 0x90u) leap_note_on(d1, d2);         /* (LEAPS: a passing note on a slur held back, core/leap.c) */
     else if (ty == 0x80u) leap_note_off(d1);
     else if (ty == 0xE0u) perf_bend(d1, d2);

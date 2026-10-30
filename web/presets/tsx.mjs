@@ -73,7 +73,7 @@ export const F = Object.fromEntries(FMT.map((n, i) => [n, i]));
 export const P_ENGINE = 0;           // a layer's first parameter is its engine (core/layers.h), by stable id both ways
 export const ENG_OFF = 0;            // engines.h ENG_ID_OFF: not in ENGINES' list
 // the sound's groups (core/layers.h GR_*), named as the device's pages are; a new one shows as GROUP n
-export const GROUPS = ['CURVE', 'BREATH LP', 'DRIVE', 'DELAY', 'REVERB', 'DETUNE', 'VOLUME'];
+export const GROUPS = ['DRIVE', 'DELAY', 'REVERB', 'DETUNE', 'VOLUME'];   // (CURVE and BREATH LP until 2026-10-30)
 export const groupName = (g) => GROUPS[g] ?? `GROUP ${g + 1}`;
 // a slot's name: up to 12 of these (the device's SAVE AS)
 export const NAME_OK = /^[A-Z0-9 .\/-]{0,12}$/;

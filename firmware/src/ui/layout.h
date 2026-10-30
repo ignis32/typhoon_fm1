@@ -8,8 +8,8 @@
  *
  * A page:  {title, kind, engine page, next, {KNOB 1, KNOB 2, KNOB 3, KNOB 4}}
  *   title        0 = the engine's own page title (engine page 1 or 2)
- *   kind         UK_KNOBS four rows of label / value / bar; UK_CURVE the breath curve, drawn, with the live
- *                breath on it; UK_FOLLOW the layer's volume envelope, drawn (delay, attack, decay, sustain,
+ *   kind         UK_KNOBS four rows of label / value / bar; UK_CURVE a source's curve (PG_SRC_A ..), drawn, with
+ *                its live value on it; UK_FOLLOW the layer's volume envelope, drawn (delay, attack, decay, sustain,
  *                release); UK_BT Bluetooth's state and log; UK_PERF the load and the xruns (ui/page_perf.c); the
  *                graph pages have their four knobs in a row below
  *   next         the page the same button goes to again (its cycle: EDIT 1 -> 2 (-> 3 -> 4) -> TONE, FX DRIVE -> DETUNE -> DELAY -> REVERB -> REVERB +);
@@ -31,6 +31,8 @@ enum {
     PG_GLOBAL, PG_BT, PG_TILT, PG_G_CURVE, PG_G_LP, PG_G_DRIVE, PG_G_DETUNE, PG_G_DELAY, PG_G_REVERB,
     PG_REVERB2, PG_G_REVERB2, PG_G_BREATH, PG_TONE, PG_ENG3, PG_ENG4, PG_LEAP,
     PG_USB, PG_USBH, PG_ENG5, PG_QUIRKS, PG_PERF,   /* (new pages at the end: the others keep their numbers) */
+    PG_CONTROLS, PG_SRC_A, PG_SRC_B, PG_SRC_C, PG_SRC_D, PG_SRCP_A, PG_SRCP_B, PG_SRCP_C, PG_SRCP_D,   /* (2026-10-30: the
+                                                  * sources; PG_CURVE, PG_G_BREATH, PG_G_CURVE: no pages now) */
     NPAGES
 };
 #define PG_STAY 0xFFu
@@ -38,7 +40,6 @@ static const ui_page_t PAGES[NPAGES] = {
     [PG_BREATH] = {"BREATH", UK_KNOBS, 0, PG_STAY, {L(P_BR_AMP), L(P_BR_FLT), L(P_BR_SHP), PR_NONE}},   /* (HOME: how the
                                                   * layer follows breath; the mix's BREATH LP until 2026-10-28, now
                                                   * ERS's and FM's EDIT 5) */
-    [PG_CURVE] = {"CURVE", UK_CURVE, 0, PG_STAY, {SP(S_BC_LO), SP(S_BC_HI), SP(S_BC_SHAPE), PR_NONE}},
     [PG_ENG1] = {0, UK_KNOBS, 1, PG_ENG2, {L(P_E0), L(P_E1), L(P_E2), L(P_E3)}},
     [PG_ENG2] = {0, UK_KNOBS, 2, PG_ENG3, {L(P_E4), L(P_E5), L(P_E6), L(P_E7)}},
     [PG_ENG3] = {0, UK_KNOBS, 3, PG_ENG4, {L(P_E8), L(P_E9), L(P_E10), L(P_E11)}},   /* (EDIT 3, 4: passed by when empty) */
@@ -58,14 +59,24 @@ static const ui_page_t PAGES[NPAGES] = {
     [PG_LAYER2] = {"LAYER +", UK_KNOBS, 0, PG_QUIRKS, {L(P_BR_FLT), L(P_BR_SHP), L(P_FTYPE), L(P_FINE)}},   /* ("BREATH"
                                                   * until 2026-10-28: HOME's page is now) */
     [PG_MIX] = {"MIX", UK_KNOBS, 0, PG_STAY, {LN(0, P_LEVEL), LN(1, P_LEVEL), LN(2, P_LEVEL), SP(S_VOLUME)}},
-    [PG_GLOBAL] = {"GLOBAL", UK_KNOBS, 0, PG_BT, {G(G_BSRC), G(G_BEND), G(G_XPOSE), PR_NONE}},   /* (KNOB 4: Bluetooth
-                                                  * until 2026-10-24, now on its own page) */
+    [PG_GLOBAL] = {"GLOBAL", UK_KNOBS, 0, PG_BT, {G(G_BEND), G(G_XPOSE), PR_NONE, PR_NONE}},   /* (KNOB 4: Bluetooth
+                                                  * until 2026-10-24, now on its own page; KNOB 1 LOUDNESS until
+                                                  * 2026-10-30, now A FROM, A's page) */
     [PG_BT] = {"BLUETOOTH", UK_BT, 0, PG_TILT, {G(G_BLE_P), G(G_BLE_C), PR_NONE, G(G_BLE_AUTO)}},   /* (KNOB 3: the list,
                                                   * ui.c; app/ble.c) */
-    [PG_TILT] = {"TILT>BEND", UK_KNOBS, 0, PG_G_BREATH, {G(G_TILT_CC), G(G_TILT_DEAD), G(G_TILT_RANGE), G(G_TILT_INV)}},
-    [PG_G_BREATH] = {"BREATH IN", UK_KNOBS, 0, PG_G_CURVE, {G(G_BREATH_CC), G(G_BSRC), G(G_BSMOOTH), PR_NONE}},
-    [PG_G_CURVE] = {"CURVE", UK_CURVE, 0, PG_LEAP, {SG(S_BC_LO), SG(S_BC_HI), SG(S_BC_SHAPE), PR_NONE}},   /* (the global
-                                                  * curve: how breath is read, beside BREATH IN) */
+    [PG_TILT] = {"BEND", UK_KNOBS, 0, PG_CONTROLS, {G(G_TILT_CC), G(G_TILT_DEAD), G(G_TILT_RANGE), G(G_TILT_INV)}},
+                                                  /* (the source BEND from a CC: TILT>BEND until 2026-10-30) */
+    [PG_CONTROLS] = {"CONTROLS", UK_KNOBS, 0, PG_LEAP, {G(G_CC_A), G(G_CC_B), G(G_CC_C), G(G_CC_D)}},   /* (the sources'
+                                                  * controllers; EDIT opens the curve of the one turned last: ui.c) */
+    /* each source's pages, from CONTROLS by EDIT (ENV: A's): the curve with OVER, then SMOOTH (A: and where it comes from) */
+    [PG_SRC_A] = {"A CURVE", UK_CURVE, 0, PG_SRCP_A, {G(G_LO_A), G(G_HI_A), G(G_SHP_A), G(G_OVER_A)}},
+    [PG_SRC_B] = {"B CURVE", UK_CURVE, 0, PG_SRCP_B, {G(G_LO_B), G(G_HI_B), G(G_SHP_B), G(G_OVER_B)}},
+    [PG_SRC_C] = {"C CURVE", UK_CURVE, 0, PG_SRCP_C, {G(G_LO_C), G(G_HI_C), G(G_SHP_C), G(G_OVER_C)}},
+    [PG_SRC_D] = {"D CURVE", UK_CURVE, 0, PG_SRCP_D, {G(G_LO_D), G(G_HI_D), G(G_SHP_D), G(G_OVER_D)}},
+    [PG_SRCP_A] = {"A +", UK_KNOBS, 0, PG_SRC_A, {G(G_SMOOTH_A), G(G_BSRC), PR_NONE, PR_NONE}},
+    [PG_SRCP_B] = {"B +", UK_KNOBS, 0, PG_SRC_B, {G(G_SMOOTH_B), PR_NONE, PR_NONE, PR_NONE}},
+    [PG_SRCP_C] = {"C +", UK_KNOBS, 0, PG_SRC_C, {G(G_SMOOTH_C), PR_NONE, PR_NONE, PR_NONE}},
+    [PG_SRCP_D] = {"D +", UK_KNOBS, 0, PG_SRC_D, {G(G_SMOOTH_D), PR_NONE, PR_NONE, PR_NONE}},
     [PG_LEAP] = {"LEAPS", UK_KNOBS, 0, PG_USB, {G(G_LEAP_MODE), G(G_LEAP_ST), G(G_LEAP_MS), PR_NONE}},   /* (core/leap.c) */
     [PG_USB] = {"USB AUDIO", UK_KNOBS, 0, PG_USBH, {G(G_USB_IN), G(G_USB_IN_LV), G(G_USB_OUT), G(G_USB_OUT_LV)}},
                                                   /* (app/usbaudio.c) */
@@ -116,7 +127,7 @@ enum { UA_NONE, UA_PAGE, UA_XPOSE, UA_XPOSE_OCT, UA_MUTE, UA_SOLO, UA_SAVE, UA_S
 #define UI_DELETE BTN_PLAY                         /* SAVE AS: the character before the cursor */
 static const struct { uint8_t btn, act, hold; uint8_t arg; int8_t step; } BUTTONS[] = {
     {BTN_HOME, UA_PAGE, UA_NONE, PG_BREATH, 0},     /* (the layer's breath: no sound group to hold back) */
-    {BTN_ENV, UA_PAGE, UA_GLOBAL, PG_CURVE, 0},
+    {BTN_ENV, UA_PAGE, UA_NONE, PG_SRC_A, 0},       /* (A's curve, the breath's: the preset's own CURVE until 2026-10-30) */
     {BTN_EDIT, UA_PAGE, UA_NONE, PG_ENG1, 0},
     {BTN_FX, UA_PAGE, UA_GLOBAL, PG_DRIVE, 0},
     {BTN_LFO, UA_PAGE, UA_NONE, PG_ENV, 0},

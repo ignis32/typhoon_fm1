@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (C) 2026 ignis32
-// Breath is smoothed in one place (G_BSMOOTH, global): a preset cannot change it, and the engines add no lag of their
+// Breath (source A) is smoothed in one place (G_SMOOTH_A, global): a preset cannot change it, and the engines add no lag of their
 // own (no hidden lags). A breath step 0 -> 127 under a held note: the level's time to 90 %
 // follows SMOOTH (a one-pole: ~2.3 time constants), on a plain sine and on EVA at its fastest RESPONSE.
 export default function (t) {
@@ -25,18 +25,18 @@ export default function (t) {
     t.off(69, 1500);
     return e.findIndex((v) => v >= 0.9 * fin) + 1;
   };
-  check(ex.sim_par_get(G(C.G_BSMOOTH)) === 0, `SMOOTH: global, 0 (none) by default (${ex.sim_par_get(G(C.G_BSMOOTH))})`);
-  ex.sim_par_set(G(C.G_BSMOOTH), 40);
+  check(ex.sim_par_get(G(C.G_SMOOTH_A)) === 0, `SMOOTH: global, 0 (none) by default (${ex.sim_par_get(G(C.G_SMOOTH_A))})`);
+  ex.sim_par_set(G(C.G_SMOOTH_A), 40);
   ex.sim_preset(0); ex.sim_preset(64); ex.sim_preset(255);
-  check(ex.sim_par_get(G(C.G_BSMOOTH)) === 40, 'SMOOTH: loading presets leaves it alone (no preset has its own)');
+  check(ex.sim_par_get(G(C.G_SMOOTH_A)) === 40, 'SMOOTH: loading presets leaves it alone (no preset has its own)');
   const sine = () => ex.sim_par_set(L1(C.P_BR_AMP), 127);   // (INIT's sine, its loudness all breath)
-  ex.sim_par_set(G(C.G_BSMOOTH), 0);
+  ex.sim_par_set(G(C.G_SMOOTH_A), 0);
   const s0 = rise(sine);
-  ex.sim_par_set(G(C.G_BSMOOTH), 5);
+  ex.sim_par_set(G(C.G_SMOOTH_A), 5);
   const s5 = rise(sine);
-  ex.sim_par_set(G(C.G_BSMOOTH), 40);
+  ex.sim_par_set(G(C.G_SMOOTH_A), 40);
   const s40 = rise(sine);
-  ex.sim_par_set(G(C.G_BSMOOTH), 0);                   // (the default again)
+  ex.sim_par_set(G(C.G_SMOOTH_A), 0);                   // (the default again)
   // (audio time from the breath: the first frames after it may come from a block rendered just before, up to 5.8 ms)
   check(s0 <= s5 && s0 <= 8 && s5 <= 16 && s40 >= 60,
     `SMOOTH sets the lag: a sine to 90 % in ${s0} ms at 0 (none), ${s5} ms at 5 ms, ${s40} ms at 40 ms`);

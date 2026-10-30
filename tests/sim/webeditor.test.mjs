@@ -211,11 +211,11 @@ export default async function (t) {
   const pyFile = new URL('fixtures/tornado_backup.json', import.meta.url);
   if (fs.existsSync(pyFile)) {
     const py = TSX.backupParse(fs.readFileSync(pyFile, 'utf8'));
-    const k = 55;
-    await ed.restore(py, py.presets.map((_, i) => (i === 0 ? k : null)));
-    const back = await ed.read(k);
-    check(py.presets.every((p) => !p.bad) && TSX.hex(back) === TSX.hex(py.presets[0].record) && t.name(k) === py.presets[0].name,
-      `webeditor RESTORE: a backup in the predecessor's format (fixtures/tornado_backup.json: ${py.presets[0].name}) into slot ${k + 1}`);
+    const k = 55;                                    // (its records are older than version 5: not read since 2026-10-30)
+    let refused = false;
+    try { await ed.restore(py, py.presets.map((_, i) => (i === 0 ? k : null))); } catch (e) { refused = /BAD/.test(e.message); }
+    check(py.presets.every((p) => !p.bad) && refused && !ex.sim_preset_user(k),
+      `webeditor RESTORE: a backup in the predecessor's format (fixtures/tornado_backup.json) is read, its old records refused`);
   }
   let bad = null;
   try { TSX.backupParse('{"format":"other"}'); } catch (e) { bad = e.message; }

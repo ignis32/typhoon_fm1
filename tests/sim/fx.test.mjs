@@ -21,7 +21,7 @@ export default function (t) {
     t.off(69, 800);
     // (with SMOOTH 0, the default since 2026-10-24, the CC's steps reach the cutoff: 4.65x, accepted: it
     // sounds right on the device; 1.06x from SMOOTH 3 ms. The bound still catches it getting worse)
-    const s0 = ex.sim_par_get(G(C.G_BSMOOTH)) === 0, bound = s0 ? 6 : 1.5;
+    const s0 = ex.sim_par_get(G(C.G_SMOOTH_A)) === 0, bound = s0 ? 6 : 1.5;
     check(after < open * bound, `breath LP: closing again after full breath does not click (2nd difference ${(after / open).toFixed(2)}x the open one's` +
       `${s0 ? ', SMOOTH 0: up to 6x accepted' : ''})`);
   }

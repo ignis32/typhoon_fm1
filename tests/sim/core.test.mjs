@@ -28,8 +28,8 @@ export default function (t) {
   run(1600);
   check(bits(ex.sim_glow_keys()) === 0, 'the bar goes away 1.5 s after the breath stops');
 
-  // BREATH CC (GLO, BREATH IN): CC11 by default (the tests set CC2: lib.mjs); another CC, or channel aftertouch (128,
-  // "AT"), and CC2 is not breath then
+  // source A, the breath (GLO > CONTROLS): CC11 by default (the tests set CC2: lib.mjs); another CC, or channel
+  // aftertouch (128, "AT"), and CC2 is not breath then
   {
     const { G } = t;
     ex.sim_preset(255);
@@ -39,16 +39,16 @@ export default function (t) {
     ex.sim_midi(0x90, 69, 80);
     const def = t.breathCcDefault, cc2 = level(0xB0, 2, 110);
     level(0xB0, 2, 0);
-    ex.sim_par_set(G(C.G_BREATH_CC), 11);
+    ex.sim_par_set(G(C.G_CC_A), 11);
     const cc2b = level(0xB0, 2, 110), cc11 = level(0xB0, 11, 110);
     level(0xB0, 11, 0);
-    ex.sim_par_set(G(C.G_BREATH_CC), 128);
+    ex.sim_par_set(G(C.G_CC_A), 128);
     const at = level(0xD0, 110, 0);
     level(0xD0, 0, 0);
     ex.sim_midi(0x80, 69, 0); run(800);
-    ex.sim_par_set(G(C.G_BREATH_CC), 2);
+    ex.sim_par_set(G(C.G_CC_A), 2);
     check(def === 11 && cc2 > 0.05 && cc2b < 1e-3 && cc11 > 0.05 && at > 0.05,
-      `BREATH CC: 11 by default (${def}), CC2 when set (${cc2.toFixed(3)}); on 11 CC2 is no breath (${cc2b.toFixed(4)}), CC11 is (${cc11.toFixed(3)}); AT: aftertouch (${at.toFixed(3)})`);
+      `A: CC11 by default (${def}), CC2 when set (${cc2.toFixed(3)}); on 11 CC2 is no breath (${cc2b.toFixed(4)}), CC11 is (${cc11.toFixed(3)}); AT: aftertouch (${at.toFixed(3)})`);
   }
 
   // every engine of the build sounds on layer 1 with breath, and more breath is louder
@@ -107,12 +107,12 @@ export default function (t) {
   ex.sim_par_set(SG(C.S_REV_MIX), 0);
   ex.sim_midi(0xB0, 2, 0); ex.sim_midi(0x90, 69, 80); run(400);
   const none = run(200);
-  ex.sim_par_set(SG(C.S_BC_LO), -40);
+  ex.sim_par_set(t.G(C.G_LO_A), -40);
   run(400);
   const head = run(200);
   ex.sim_midi(0x80, 69, 0); run(800);
   const after = run(200);
-  ex.sim_par_set(SG(C.S_BC_LO), 8);
+  ex.sim_par_set(t.G(C.G_LO_A), 0);
   check(none < 1e-3 && head > 0.02 && after < 1e-3, `LOW -40: a held note with no breath sounds (${none.toFixed(4)} -> ${head.toFixed(3)}), silent after it (${after.toFixed(4)})`);
 
   // the volume envelope: DELAY, ATTACK, DECAY to SUSTAIN; it restarts on a fresh attack, not on legato

@@ -2,13 +2,15 @@
 /* Copyright (C) 2026 ignis32 */
 /* The performance and the layers (the audio ISR's side).
  *
- * The main loop posts what happens (perf_note_on / _off, perf_breath, perf_bend, perf_all_off) into a ring;
+ * The main loop posts what happens (perf_note_on / _off, perf_src, perf_bend, perf_all_off) into a ring;
  * the audio ISR takes it at the start of each control block (CTL = 32 frames) and owns everything below:
  *   - the note: mono, last-note priority over the held notes. A note while another sounds is LEGATO: the
  *     voices only change pitch (no note_on, no reset: phases and filters run on). The re.corder sends the new
  *     note-on before the old note-off, so a slur is always legato.
- *   - the breath: CC2 (0..127) through the curve (S_BC_LO / HI / SHAPE: breath_curve, the UI draws it),
- *     smoothed (G_BSMOOTH: global, the only smoothing breath gets). G_BSRC AUTO uses CC2 once it comes, else the note-on velocity (a keyboard, the keys).
+ *   - the sources (notes/05-controls.md): A .. D, each its controller (0..127) through its own curve (G_LO_x, G_HI_x,
+ *     G_SHP_x: src_curve, the UI draws it), smoothed (G_SMOOTH_x, 0 by default: the only smoothing a source gets),
+ *     and its XO past OVER (G_OVER_x); BEND, the pitch bend. A is the breath by convention: G_BSRC AUTO uses its
+ *     controller once it comes, else the note-on velocity (a keyboard, the keys).
  *   - transpose (G_XPOSE): taken when a note starts; the main loop cuts the sounding note when it changes
  *     (perf_cut: a short fade), so a note is never moved under the player. Notes are kept by the number that
  *     came in, so the note-off of a note held across a change still finds it.
@@ -19,7 +21,7 @@
  *   - then the mix: drive, the breath low-pass, delay, reverb (core/fx.c fx_block).
  * The UI reads perf_ui (note, breath, levels): written here, read there, no lock needed for a meter. */
 
-enum { EV_ON, EV_OFF, EV_BREATH, EV_BEND, EV_ALLOFF, EV_CUT };
+enum { EV_ON, EV_OFF, EV_SRC, EV_BEND, EV_ALLOFF, EV_CUT };
 typedef struct { uint8_t t, a, b; } pev_t;
 #define PQ 64u
 static pev_t pq[PQ];
@@ -37,15 +39,15 @@ static void perf_post(uint32_t t, uint32_t a, uint32_t b)   /* main loop only */
 }
 static void perf_note_on(uint32_t note, uint32_t vel) { perf_post(vel ? EV_ON : EV_OFF, note & 127u, vel & 127u); }
 static void perf_note_off(uint32_t note) { perf_post(EV_OFF, note & 127u, 0); }
-static void perf_breath(uint32_t cc2) { perf_post(EV_BREATH, cc2 & 127u, 0); }
+static void perf_src(uint32_t s, uint32_t v) { perf_post(EV_SRC, s % NSRC_CC, v & 127u); }   /* source A + s */
 static void perf_bend(uint32_t lsb, uint32_t msb) { perf_post(EV_BEND, lsb & 127u, msb & 127u); }
 static void perf_all_off(void) { perf_post(EV_ALLOFF, 0, 0); }
 static void perf_cut(void) { perf_post(EV_CUT, 0, 0); }   /* every note off, the sound out in a few ms */
 
 static volatile struct {
     uint8_t note, gate;                            /* the note (255: none yet), held */
-    int32_t breath;                                /* Q15, after the curve and the smoothing */
-    int32_t breath_in;                             /* Q15, before the curve (the dot's x on the curve page) */
+    int32_t breath;                                /* Q15, A after its curve and smoothing (the status row's bar) */
+    int32_t src_in[NSRC_CC], src_out[NSRC_CC];     /* Q15, A .. D before their curves and after (the dot on a curve page) */
     int32_t amp[NLAYER];                           /* each layer's loudness, Q15 */
     uint8_t missing[NLAYER];                       /* the layer's engine id is not in this build */
 } perf_ui = {255};
@@ -56,11 +58,11 @@ static struct {
     uint8_t stack[8], n;                           /* held notes, the last on top */
     uint8_t note, vel, gate;
     int8_t xpose;                                  /* G_XPOSE as the note started */
-    int32_t braw;                                 /* the last CC2, Q15 */
-    int32_t breath;                                /* smoothed, Q15 */
+    int32_t raw[NSRC_CC];                          /* A .. D: the last controller value, Q15 */
+    int32_t breath;                                /* A, Q15 (src_val[SRC_A]: what the layers and the effects take) */
     int32_t bend16;                                /* 1/16 semitone */
     int32_t bend_fine;                             /* and the rest, as m.fine (1/4096 of the increment, ~0.42 cent) */
-    uint32_t blocks, t_cc2;                        /* block counter, when CC2 last came (0: never) */
+    uint32_t blocks, t_cc2;                        /* block counter, when A's controller last came (0: never) */
 } pf = {.note = 60};
 
 enum { ENV_OFF, ENV_DELAY, ENV_ATTACK, ENV_DECAY, ENV_SUSTAIN, ENV_RELEASE };
@@ -75,7 +77,9 @@ static struct {
     blp_t blp;                                     /* the engine's breath LP (engine_t.blp; dsp/breathlp.c) */
 } lay[NLAYER];
 
-/* a breath curve: CC2 as Q15 in, Q15 out, for LOW, HIGH (0..127), SHAPE (-64..63) (also the UI's picture of it) */
+/* a source's curve: its controller as Q15 in, Q15 out, for LOW, HIGH (0..127), SHAPE (-64..63) (also the UI's picture
+ * of it). One piece: another kind of curve (reversed, steps ...) goes in here and src_curve, nothing that reads the
+ * sources changes */
 static int32_t breath_curve_of(int32_t x, int32_t lo7, int32_t hi7, int32_t s)
 {
     int32_t lo = lo7 * 32767 / 127, hi = hi7 * 32767 / 127, c, y;
@@ -92,7 +96,10 @@ static int32_t breath_curve_of(int32_t x, int32_t lo7, int32_t hi7, int32_t s)
     }
     return clamp(y, 0, 32767);
 }
-static int32_t breath_curve(int32_t x) { return breath_curve_of(x, sv(S_BC_LO), sv(S_BC_HI), sv(S_BC_SHAPE)); }
+static int32_t src_curve(uint32_t s, int32_t x)   /* source A + s */
+{
+    return breath_curve_of(x, gpar[G_LO_A + s], gpar[G_HI_A + s], gpar[G_SHP_A + s]);
+}
 
 /* the time of a 0..127 time parameter in ms: 1 ms .. ~4 s, exponential (P_ATK, P_REL; ui shows the same) */
 static uint32_t time_ms(int32_t v)
@@ -278,9 +285,10 @@ static void notes_event(const pev_t *ev)
                 lay[l].cut = 1;
         }
         break;
-    case EV_BREATH:
-        pf.braw = (int32_t)ev->a * 32767 / 127;
-        pf.t_cc2 = pf.blocks | 1u;
+    case EV_SRC:
+        pf.raw[ev->a % NSRC_CC] = (int32_t)ev->b * 32767 / 127;
+        if (!ev->a)
+            pf.t_cc2 = pf.blocks | 1u;
         break;
     case EV_BEND:
         {   /* in 1/1600 semitone (1/16 cent; 8192 x 24 x 1600 fits): 1/16 semitones, the rest as fine tuning, so a
@@ -288,31 +296,41 @@ static void notes_event(const pev_t *ev)
             int32_t c16 = ((((int32_t)ev->b << 7 | ev->a) - 8192) * gpar[G_BEND] * 1600) / 8192;
             pf.bend16 = c16 / 100;
             pf.bend_fine = CENTS16_FINE(c16 - pf.bend16 * 100);
+            src_val[SRC_BEND] = clamp(((((int32_t)ev->b << 7 | ev->a) - 8192) * 4), -32768, 32767);
         }
         break;
     }
 }
 
-/* the breath, Q15, after the curve, before SMOOTH (src_breath: an engine with controls of its own takes it there) */
-static int32_t breath_src(void)
+/* source A + s, Q15, after its curve, before SMOOTH (src_breath: A, for an engine with controls of its own). A by
+ * G_BSRC: AUTO its controller once it came (in the last 3 s), else the note-on velocity */
+static int32_t src_in(uint32_t s)
 {
     int32_t src = gpar[G_BSRC], x;
-    int use_cc2 = src == 1 || (src == 0 && pf.t_cc2 && (int32_t)(pf.blocks - pf.t_cc2) < (int32_t)(3u * BLOCKS_PER_S));
-    /* (signed: a CC2 taken at the audio block's start is stamped pf.blocks | 1, one ahead of the count until its
+    int use_cc = s || src == 1 || (src == 0 && pf.t_cc2 && (int32_t)(pf.blocks - pf.t_cc2) < (int32_t)(3u * BLOCKS_PER_S));
+    /* (signed: a value taken at the audio block's start is stamped pf.blocks | 1, one ahead of the count until its
      * first control block; unsigned, that read as long ago and the velocity blew for a block) */
-    if (use_cc2)
-        x = pf.braw;
+    if (use_cc)
+        x = pf.raw[s];
     else
         x = pf.gate ? (int32_t)pf.vel * 32767 / 127 : 0;
-    perf_ui.breath_in = x;
-    if (use_cc2)
-        x = breath_curve(x);                       /* (velocity is already what the player meant) */
+    perf_ui.src_in[s] = x;
+    if (use_cc)
+        x = src_curve(s, x);                       /* (velocity is already what the player meant) */
     return x;
 }
-/* the breath, Q15, once a block */
-static void breath_tick(void)
+static int32_t breath_src(void) { return src_in(0); }
+/* the sources, once a block: A .. D smoothed (G_SMOOTH_x), their XO past OVER; A is pf.breath */
+static void sources_tick(void)
 {
-    pf.breath += (int32_t)(mul64(breath_src() - pf.breath, pole_k((uint32_t)gpar[G_BSMOOTH])) >> 15);
+    uint32_t s;
+    for (s = 0; s < NSRC_CC; s++) {
+        int32_t *v = &src_val[SRC_A + s], o = gpar[G_OVER_A + s] * 32767 / 127;
+        *v += (int32_t)(mul64(src_in(s) - *v, pole_k((uint32_t)gpar[G_SMOOTH_A + s])) >> 15);
+        perf_ui.src_out[s] = *v;
+        src_val[SRC_AO + s] = o > 0 && *v > o ? clamp(((*v - o) << 15) / (32767 - o), 0, 32767) : 0;
+    }
+    pf.breath = src_val[SRC_A];
 }
 
 /* the layer that plays an engine rendering whole audio blocks (engine_t.audio: PANFLUTE, on the second core): the
@@ -357,7 +375,7 @@ static void layers_block(int32_t *outl, int32_t *outr, uint32_t cb)
 {
     uint32_t l;
     pf.blocks++;
-    breath_tick();
+    sources_tick();
     lblk.fxbr[cb] = pf.breath;
     perf_ui.note = pf.note;
     perf_ui.gate = pf.gate;

@@ -26,7 +26,8 @@ static int pr_layer(pref_t r) { return r != PR_NONE && !(r & (PR_GLOBAL | PR_SND
 static int pr_snd(pref_t r) { return r != PR_NONE && (r & PR_SND); }   /* SP or SG */
 
 static const char *const N_FTYPE[] = {"LP", "BP", "HP"};
-static const char *const N_BSRC[] = {"AUTO", "BREATH", "VEL"};   /* (BREATH: the BREATH CC only) */
+static const char *const N_BSRC[] = {"AUTO", "CC", "VEL"};   /* (A: its controller, else velocity; the controller only;
+                                                               * velocity) */
 static const char *const N_REVT[] = {"PLATE", "HALL"};   /* (OLD dropped 2026-10-23) */
 static const char *const N_LAYER[] = {"1", "2", "3", "4"};
 static const char *const N_BLE_C[] = {"OFF", "FIRST", "CHOOSE"};   /* (app/ble.c BC_*; until 2026-10-24 one knob,
@@ -62,14 +63,6 @@ static const param_desc_t COMMON[NCOMMON] = {
 };
 /* the sound's (the defaults are the global copy's at first) */
 static const param_desc_t SOUND[S_COUNT] = {
-    [S_BC_LO] = {"LOW", F_INT, -64, 126, 0, 0, 0},     /* (the breath curve's: its page says so); below 0: a head
-                                                           * start: a held note sounds before any breath */
-    [S_BC_HI] = {"HIGH", F_INT, 1, 127, 120, 0, 0},
-    [S_BC_SHAPE] = {"SHAPE", F_INT, -64, 63, 0, 0, 0},
-    [S_LPF] = {"-", F_INT, 0, 0, 0, 0, 0},             /* (S_LPF, S_LPRES, S_BR_LP: the mix's breath LP until 2026-10-28,
-                                                         * now ERS's and FM's own, EDIT 5: nothing, kept in place) */
-    [S_LPRES] = {"-", F_INT, 0, 0, 0, 0, 0},
-    [S_BR_LP] = {"-", F_INT, 0, 0, 0, 0, 0},
     [S_DRIVE] = {"DRIVE", F_PCT, 0, 127, 0, 0, 0},
     [S_DRV_AT] = {"DRV AT", F_PCT, 0, 127, 96, 0, 0},
     [S_DLY_TIME] = {"TIME", F_TIME, 64, 125, 100, 0, 0},   /* 30 ms .. ~1 s */
@@ -88,9 +81,9 @@ static const param_desc_t SOUND[S_COUNT] = {
     [S_REV_PRE] = {"PRE-DLY", F_INT, 0, 200, 20, 0, "ms"},
     [S_VOLUME] = {"VOLUME", F_INT, 0, 127, 100, 0, 0},   /* (100: unity; 127 = +2 dB) */
 };
-static const char *const GROUP_NAME[NGROUP] = {"CURVE", "LP", "DRIVE", "DELAY", "REVERB", "DETUNE", "VOLUME"};
+static const char *const GROUP_NAME[NGROUP] = {"DRIVE", "DELAY", "REVERB", "DETUNE", "VOLUME"};
 static const param_desc_t GLOBAL[G_COUNT] = {
-    [G_BSRC] = {"LOUDNESS", F_ENUM, 0, 2, 0, N_BSRC, 0},
+    [G_BSRC] = {"A FROM", F_ENUM, 0, 2, 0, N_BSRC, 0},
     [G_BEND] = {"BEND", F_INT, 0, 24, 4, 0, "st"},   /* (4 semitones) */
     [G_XPOSE] = {"TRANSP", F_SEMI, -24, 24, 0, 0, 0},
 #if TYPHOON_BLE
@@ -103,9 +96,6 @@ static const param_desc_t GLOBAL[G_COUNT] = {
     [G_TILT_DEAD] = {"DEAD", F_INT, 0, 30, 6, 0, 0},
     [G_TILT_RANGE] = {"RANGE", F_INT, 0, 100, 10, 0, "%"},
     [G_TILT_INV] = {"INVERT", F_ONOFF, 0, 1, 0, 0, 0},
-    [G_BREATH_CC] = {"BREATH CC", F_INT, 1, 128, 11, 0, 0},   /* (128: AT, channel aftertouch; par_text) */
-    [G_BSMOOTH] = {"SMOOTH", F_INT, 0, 100, 0, 0, "ms"},    /* (0: none, the default since 2026-10-24; 5 until then,
-                                                              * 20 until 2026-10-23: ~46 ms to 90 %, felt as lag) */
     [G_LEAP_MODE] = {"LEAPS", F_ENUM, 0, LEAP_NMODE - 1, LEAP_HOLD, N_LEAP, 0},
     [G_LEAP_ST] = {"OVER", F_INT, 1, 24, 13, 0, "st"},   /* (the thumb's passing notes: +17 / +19 from D6) */
     [G_LEAP_MS] = {"WAIT", F_INT, 0, 60, 30, 0, "ms"},   /* (95 % of them end within 27 ms, in a recorded take) */
@@ -122,6 +112,32 @@ static const param_desc_t GLOBAL[G_COUNT] = {
     [G_BLE_AUTO] = {"AUTO_RECONNECT", F_ONOFF, 0, 0, 0, 0, 0},
 #endif
     [G_USB_HOST] = {"USB HOST", F_ONOFF, 0, 1, 0, 0, 0},     /* (OFF by default: a computer, the editor, the installer) */
+    /* the sources (layers.h G_CC_A ..): the controller (0: OFF, 128: AT; par_text), the curve, OVER (0: OFF), SMOOTH */
+    [G_CC_A] = {"A", F_INT, 0, 128, 11, 0, 0},           /* (the breath: CC11, the re.corder's) */
+    [G_CC_B] = {"B", F_INT, 0, 128, 52, 0, 0},           /* (the re.corder's rotation, as BEND's tilt) */
+    [G_CC_C] = {"C", F_INT, 0, 128, 0, 0, 0},
+    [G_CC_D] = {"D", F_INT, 0, 128, 0, 0, 0},
+    [G_LO_A] = {"LOW", F_INT, -64, 126, 0, 0, 0},        /* (below 0: a head start: a held note sounds before any breath) */
+    [G_LO_B] = {"LOW", F_INT, -64, 126, 0, 0, 0},
+    [G_LO_C] = {"LOW", F_INT, -64, 126, 0, 0, 0},
+    [G_LO_D] = {"LOW", F_INT, -64, 126, 0, 0, 0},
+    [G_HI_A] = {"HIGH", F_INT, 1, 127, 120, 0, 0},       /* (the breath curve's, as it was) */
+    [G_HI_B] = {"HIGH", F_INT, 1, 127, 127, 0, 0},
+    [G_HI_C] = {"HIGH", F_INT, 1, 127, 127, 0, 0},
+    [G_HI_D] = {"HIGH", F_INT, 1, 127, 127, 0, 0},
+    [G_SHP_A] = {"SHAPE", F_INT, -64, 63, 0, 0, 0},
+    [G_SHP_B] = {"SHAPE", F_INT, -64, 63, 0, 0, 0},
+    [G_SHP_C] = {"SHAPE", F_INT, -64, 63, 0, 0, 0},
+    [G_SHP_D] = {"SHAPE", F_INT, -64, 63, 0, 0, 0},
+    [G_OVER_A] = {"OVER", F_INT, 0, 126, 0, 0, 0},
+    [G_OVER_B] = {"OVER", F_INT, 0, 126, 0, 0, 0},
+    [G_OVER_C] = {"OVER", F_INT, 0, 126, 0, 0, 0},
+    [G_OVER_D] = {"OVER", F_INT, 0, 126, 0, 0, 0},
+    [G_SMOOTH_A] = {"SMOOTH", F_INT, 0, 100, 0, 0, "ms"},   /* (0: none; breath's was 5 until 2026-10-24, 20 until
+                                                             * 2026-10-23: ~46 ms to 90 %, felt as lag) */
+    [G_SMOOTH_B] = {"SMOOTH", F_INT, 0, 100, 0, 0, "ms"},
+    [G_SMOOTH_C] = {"SMOOTH", F_INT, 0, 100, 0, 0, "ms"},
+    [G_SMOOTH_D] = {"SMOOTH", F_INT, 0, 100, 0, 0, "ms"},
 };
 
 static uint32_t par_dirty;                         /* bumped by every change: the UI redraws, storage saves */
@@ -332,8 +348,19 @@ static void par_value_text(pref_t r, int32_t v, char *buf)
         put_str(buf, "OFF");
         return;
     }
-    if (r == G(G_BREATH_CC) && v == 128) {        /* (breath from channel aftertouch) */
-        put_str(buf, "AT");
+    if (r >= G(G_CC_A) && r <= G(G_CC_D)) {       /* a source's controller: OFF, CC n, AT */
+        if (!v)
+            put_str(buf, "OFF");
+        else if (v == 128)
+            put_str(buf, "AT");
+        else {
+            put_str(buf, "CC ");
+            put_int(buf + 3, v, 0);
+        }
+        return;
+    }
+    if (r >= G(G_OVER_A) && r <= G(G_OVER_D) && !v) {   /* (no XO) */
+        put_str(buf, "OFF");
         return;
     }
     if (pr_layer(r) && (r & 0xFFu) == P_ENGINE) {

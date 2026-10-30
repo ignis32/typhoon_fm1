@@ -15,12 +15,12 @@
  * a read takes the main record, else the copy. (New sectors hold whatever was there: no good record, the slot
  * plays its factory preset until saved.)
  * A slot never saved plays a factory preset (FACTORY[k]) when there is one, else INIT (one sine).
- * A record keeps the counts it was written with (layers, P_COUNT, S_COUNT) and is read by them: its last engine values
- * (ps_nepar: 16 in a version 1 record, until 2026-10-28; NEPAR, 20, from version 2) are P_E0.., the ones before are
- * the commons in order, S_* go by index. (Records from before
- * 2026-10-21 held 8 engine values: not read right, there were none outside the factory.) New parameters therefore go
- * just before P_E0 (layers.h) or at the end of S_*, and take their defaults in older records; the record has room
- * for 4 layers of 40 and 48 S_*.
+ * A record keeps the counts it was written with (layers, P_COUNT, S_COUNT) and is read by them: its last NEPAR values
+ * are P_E0.., the ones before are the commons in order, S_* go by index. New parameters therefore go just before P_E0
+ * (layers.h) or at the end of S_*, and take their defaults in records written before them; the record has room for
+ * 3 layers of 48, the routes (PS_NCELL) and 48 S_*. Only version PS_VER is read: older records (from before
+ * 2026-10-30, the sources) are not (no user presets to keep then: the user, 2026-10-30), their slots play their
+ * factory presets until saved again.
  *
  * The state (fm1-base's store, OBJ_STATE: app/app.c settings_*): the globals, the global sound, the edit buffer (what
  * plays now, edited or not, and its slot), so a power cycle brings back exactly what was playing. Saved by the
@@ -34,24 +34,22 @@
 #define PS_HI_AT (17u * 0x1000u)                   /* slots 65 .. 96: sectors 17 .. 20 (after the BT stack's 16) */
 #define PS_HI_COPY ((NPRESET - PS_LO) / PS_PER_SEC * 0x1000u)   /* their copy right after (sectors 21 .. 24) */
 #define PS_MAGIC 0x31505254u                       /* "TRP1" */
-#define PS_VER 4u                                  /* 4: 48 values a layer (QUIRKS), EVA's SINE wave (below 4, the
-                                                    * waves after TRI one higher: ps_eva_waves); 3: EDIT 5 (P_E16 ..) as saved; 2:
-                                                    * NEPAR engine values, EDIT 5 meaning nothing yet; 1: 16 (until
-                                                    * 2026-10-28). Below 3, EDIT 5 takes the engine's defaults
-                                                    * (ps_edit5_defaults); below 4, room for 40 a layer (ps_val) */
-#define PS_NL 4u
-#define PS_NP 48u                                  /* (40 until version 4: PS_NP_V3) */
-#define PS_NP_V3 40u
+#define PS_VER 5u                                  /* 5 (2026-10-30): the sources (no breath curve, no LP group in S_*),
+                                                    * the routes; 4 and older are not read */
+#define PS_NL 3u
+#define PS_NP 48u
 #define PS_NS 48u
 #define PS_NAME 12u
+#define PS_NCELL 32u                               /* the routes a preset has room for (core/routes.c), 3 bytes each */
 typedef struct {
     uint32_t magic, crc;                           /* crc: of every byte after it */
-    uint8_t ver, nl, np, ns;                       /* PS_VER (or 1); NLAYER, P_COUNT, S_COUNT when written */
+    uint8_t ver, nl, np, ns;                       /* PS_VER; NLAYER, P_COUNT, S_COUNT when written */
     uint8_t own, spare[3];                         /* s_own */
     char name[PS_NAME];                            /* ASCII, 0-padded (no 0 when 12 long) */
     int16_t p[PS_NL][PS_NP];
+    uint8_t cell[PS_NCELL][3];                     /* the routes (where version 4 had its fourth layer's room) */
     int16_t s[PS_NS];                              /* sown (every group's, owned or not) */
-    uint8_t reserved[PS_SLOT - 28u - PS_NL * PS_NP * 2u - PS_NS * 2u];
+    uint8_t reserved[PS_SLOT - 28u - PS_NL * PS_NP * 2u - PS_NCELL * 3u - PS_NS * 2u];
 } ps_rec_t;
 _Static_assert(sizeof(ps_rec_t) == PS_SLOT, "preset record layout");
 _Static_assert(NLAYER <= PS_NL && P_COUNT <= PS_NP && S_COUNT <= PS_NS && NGROUP <= 8u, "preset record: room");
@@ -80,7 +78,8 @@ static struct {
     uint8_t cur;                                   /* the slot loaded / saved last */
     char name[PS_NAME + 1];                        /* the name of what plays */
 } ps;
-static ps_rec_t ps_tmp, ps_new;
+static ps_rec_t ps_tmp __attribute__((section(".pool"))), ps_new __attribute__((section(".pool")));   /* (the pool:
+                                                    * main loop only, RAM kept for the audio) */
 static uint32_t ps_sbuf[0x1000u / 4u] __attribute__((section(".pool")));   /* a sector, while saving */
 
 /* CRC-32 as zlib's (IEEE 802.3, reflected, polynomial 0xEDB88320, ~0 in and out), a bit at a time: the low bit
@@ -97,24 +96,8 @@ static uint32_t ps_crc(const uint8_t *p, uint32_t n)
 }
 static int ps_ok(const ps_rec_t *r)
 {
-    return r->magic == PS_MAGIC && r->ver >= 1u && r->ver <= PS_VER &&
-           r->crc == ps_crc((const uint8_t *)r + 8, PS_SLOT - 8u);
+    return r->magic == PS_MAGIC && r->ver == PS_VER && r->crc == ps_crc((const uint8_t *)r + 8, PS_SLOT - 8u);
 }
-/* the engine values a record holds, its last ones: 16 in a version 1 record (until 2026-10-28), NEPAR from 2 */
-static uint32_t ps_nepar(const ps_rec_t *r) { return r->ver >= 2u ? NEPAR : 16u; }
-/* a record's values as it was written: layer l's i, and the sound's i. Before version 4 a layer had room for 40
- * (PS_NP_V3), so its layers and the sound's values lie where that layout put them */
-static int32_t ps_val(const ps_rec_t *r, uint32_t l, uint32_t i)
-{
-    const int16_t *q = (const int16_t *)r->p;
-    return r->ver >= 4u ? r->p[l][i] : q[l * PS_NP_V3 + i];
-}
-static int32_t ps_sval(const ps_rec_t *r, uint32_t i)
-{
-    const int16_t *q = (const int16_t *)r->p;
-    return r->ver >= 4u ? r->s[i] : q[PS_NL * PS_NP_V3 + i];
-}
-static uint32_t ps_np_room(const ps_rec_t *r) { return r->ver >= 4u ? PS_NP : PS_NP_V3; }
 /* slot k's sector in the store (copy 0: the main one, 1: its copy) */
 static uint32_t ps_sec(uint32_t k, uint32_t copy)
 {
@@ -192,50 +175,18 @@ static void factory_apply(uint32_t k)
     }
 }
 
-/* a layer from a record or state from before 2026-10-28 (version < 3), as it sounded: EDIT 5 (P_E16 ..) at its
- * engine's defaults (ERS's and FM's breath LP: the mix's old one), then what had no knob then at what it was: the
- * vibrato's swell, 400 ms (VIB SWELL 64; EVA's, ERS's); and no lag on the breath (EVA's and ERS's LAG 0: the user,
- * 2026-10-28, a delay only as a swell) */
-static void ps_edit5_defaults(uint32_t l)
-{
-    const engine_t *e = layer_engine(l);
-    int16_t *p = trk[l].p;
-    uint32_t k;
-    for (k = 16u; k < NEPAR; k++)
-        p[P_E0 + k] = e->edit[k].def;
-    if (p[P_ENGINE] == ENG_ID_EVA) {
-        p[P_E0 + 15] = 0;                                          /* LAG none (RESPONSE was there) */
-        p[P_E0 + 16] = 64;                                         /* VIB SWELL */
-    } else if (p[P_ENGINE] == ENG_ID_ERS) {
-        p[P_E0 + 11] = 0;                                          /* LAG none (meant nothing 2026-10-23 .. 28) */
-        p[P_E0 + 19] = 64;                                         /* VIB SWELL */
-    }
-}
-/* a layer from a record or state from before version 4 (2026-10-28): EVA's waves after TRI one higher (SINE came in
- * after it: eng_eva.c EW_SINE) */
-static void ps_eva_waves(uint32_t l)
-{
-    int16_t *p = trk[l].p;
-    if (p[P_ENGINE] == ENG_ID_EVA && p[P_E0 + 1] >= 4)
-        p[P_E0 + 1]++;
-}
-
 static void ps_apply(const ps_rec_t *r)
 {
-    uint32_t l, i, ne = ps_nepar(r), nc = r->np > ne ? r->np - ne : 0;
+    uint32_t l, i, nc = r->np > NEPAR ? r->np - NEPAR : 0;
     layers_defaults();
     for (l = 0; l < NLAYER && l < r->nl && l < PS_NL; l++) {
         for (i = 0; i < NCOMMON && i < nc; i++)
-            trk[l].p[i] = (int16_t)ps_val(r, l, i);
-        for (i = 0; i < ne && i < NEPAR && nc + i < r->np && nc + i < ps_np_room(r); i++)
-            trk[l].p[P_E0 + i] = (int16_t)ps_val(r, l, nc + i);
-        if (r->ver < 3u)
-            ps_edit5_defaults(l);
-        if (r->ver < 4u)
-            ps_eva_waves(l);
+            trk[l].p[i] = r->p[l][i];
+        for (i = 0; i < NEPAR && nc + i < r->np && nc + i < PS_NP; i++)
+            trk[l].p[P_E0 + i] = r->p[l][nc + i];
     }
     for (i = 0; i < S_COUNT; i++)
-        sown[i] = i < r->ns && i < PS_NS ? (int16_t)ps_sval(r, i) : sglob[i];
+        sown[i] = i < r->ns && i < PS_NS ? r->s[i] : sglob[i];
     s_own = (uint8_t)(r->own & ((1u << NGROUP) - 1u));
 }
 
@@ -331,102 +282,82 @@ static int ps_save(uint32_t k)
     return 0;
 }
 
-/* ---- the state in the settings sector (<= 512 bytes). With room to grow: the counts it was saved with say what is
- * there, and are read by them as the presets are (layers: the commons, then the NEPAR engine values; S_* and G_* by
- * index): a new parameter (just before P_E0, or at the end of S_* / G_*) takes its default, nothing is lost */
-#define STATE_MAGIC 0x7A0Bu                        /* change it only when the layout below changes (0x7A0B: 48 values a
-                                                    * layer; 0x7A0A: 40, EDIT 5 as saved; 0x7A09: NEPAR engine values,
-                                                    * EDIT 5 meaning nothing yet; 0x7A08, until 2026-10-28, 16: all
-                                                    * still read, the older ones in their layout (P_SAVED_V3), EDIT 5
-                                                    * then the engine's defaults below 0x7A0A) */
-#define STATE_MAGIC_40 0x7A0Au
-#define STATE_MAGIC_20 0x7A09u
-#define STATE_MAGIC_16 0x7A08u
+/* ---- the state in the settings object (fm1-base's OBJ_STATE, up to PLAT_STORE_MAX). With room to grow: the counts it
+ * was saved with say what is there, and are read by them as the presets are (layers: the commons, then the NEPAR
+ * engine values; S_* and G_* by index): a new parameter (just before P_E0, or at the end of S_* / G_*) takes its
+ * default, nothing is lost. Another layout is a new STATE_MAGIC; an older state is not read: the globals start from
+ * their defaults once (0x7A0B and older, before 2026-10-30, the sources: the user's call, no conversions) */
+#define STATE_MAGIC 0x7A0Cu                        /* change it only when the layout below changes (0x7A0C: the
+                                                    * sources' globals, the routes) */
 #define P_SAVED 48u
-#define P_SAVED_V3 40u                             /* (the layers' room in the states before 0x7A0B) */
-#define S_SAVED 32u
+#define S_SAVED 24u
 typedef struct {
     uint16_t magic;
     uint8_t ng, ns, np, nl;                        /* G_COUNT, S_COUNT, P_COUNT, NLAYER when saved */
     uint8_t cur, edited, own, spare;
     int16_t g[G_SAVED];
     int16_t sg[S_SAVED];                           /* the global sound */
-    int16_t so[S_SAVED];                           /* the edit buffer: its own sound, its layers, its name */
+    int16_t so[S_SAVED];                           /* the edit buffer: its own sound, its layers, its routes, its name */
     int16_t p[NLAYER][P_SAVED];
+    uint8_t cell[PS_NCELL][3];
     char name[PS_NAME];
 } state_t;
-_Static_assert(sizeof(state_t) <= 512u, "the settings sector holds 512 bytes");
+_Static_assert(sizeof(state_t) <= PLAT_STORE_MAX, "the settings object: room");
 _Static_assert(G_COUNT <= G_SAVED && S_COUNT <= S_SAVED && P_COUNT <= P_SAVED, "the saved state: room");
-/* an older state (0x7A08 .. 0x7A0A): its layers had room for 40 (P_SAVED_V3), its name right after them */
-#define STATE_V3_SIZE (__builtin_offsetof(state_t, p) + NLAYER * P_SAVED_V3 * 2u + PS_NAME)
+static state_t state_buf __attribute__((section(".pool")));   /* (loading and saving: the main loop's, in the pool) */
 static void state_load(void)
 {
-    static state_t s;
-    const int16_t *sp = (const int16_t *)s.p;
-    const char *name;
-    uint32_t i, n, nc, ne, room;
+    state_t *s = &state_buf;
+    uint32_t i, n, nc;
     params_defaults();
     for (i = 0; i < NPRESET; i++)
         ps_index(i);
-    if (!settings_load(&s, sizeof s) && s.magic == STATE_MAGIC)
-        room = P_SAVED;
-    else if (!settings_load(&s, STATE_V3_SIZE) && s.magic != STATE_MAGIC)
-        room = P_SAVED_V3;
-    else
-        s.magic = 0, room = 0;
-    name = room == P_SAVED ? s.name : (const char *)sp + NLAYER * P_SAVED_V3 * 2u;
-    ne = s.magic == STATE_MAGIC_16 ? 16u : NEPAR;  /* the engine values it holds */
-    if ((s.magic != STATE_MAGIC && s.magic != STATE_MAGIC_40 && s.magic != STATE_MAGIC_20 &&
-         s.magic != STATE_MAGIC_16) || s.ng > G_SAVED || s.ns > S_SAVED || s.np < ne || s.np > room ||
-        s.nl != NLAYER) {
+    if (settings_load(s, sizeof *s) || s->magic != STATE_MAGIC || s->ng > G_SAVED || s->ns > S_SAVED ||
+        s->np < NEPAR || s->np > P_SAVED || s->nl != NLAYER) {
         ps_load(0);                                /* nothing saved, or a layout we do not know: the first preset */
         return;
     }
-    for (i = 0; i < G_COUNT && i < s.ng; i++)
-        gpar[i] = (int16_t)clamp(s.g[i], GLOBAL[i].min, GLOBAL[i].max);
-    for (i = 0; i < S_COUNT && i < s.ns; i++) {
-        sglob[i] = (int16_t)clamp(s.sg[i], SOUND[i].min, SOUND[i].max);
-        sown[i] = (int16_t)clamp(s.so[i], SOUND[i].min, SOUND[i].max);
+    for (i = 0; i < G_COUNT && i < s->ng; i++)
+        gpar[i] = (int16_t)clamp(s->g[i], GLOBAL[i].min, GLOBAL[i].max);
+    for (i = 0; i < S_COUNT && i < s->ns; i++) {
+        sglob[i] = (int16_t)clamp(s->sg[i], SOUND[i].min, SOUND[i].max);
+        sown[i] = (int16_t)clamp(s->so[i], SOUND[i].min, SOUND[i].max);
     }
-    nc = s.np - ne;                                /* the commons saved; then the engine's ne */
+    nc = s->np - NEPAR;                            /* the commons saved; then the engine's NEPAR */
     for (n = 0; n < NLAYER; n++) {
         for (i = 0; i < NCOMMON && i < nc; i++)
-            trk[n].p[i] = sp[n * room + i];        /* (an engine this build lacks: layers.c plays ENGINES[0]) */
-        for (i = 0; i < ne; i++)
-            trk[n].p[P_E0 + i] = sp[n * room + nc + i];
-        if (s.magic != STATE_MAGIC && s.magic != STATE_MAGIC_40)
-            ps_edit5_defaults(n);
-        if (s.magic != STATE_MAGIC)
-            ps_eva_waves(n);
+            trk[n].p[i] = s->p[n][i];              /* (an engine this build lacks: layers.c plays ENGINES[0]) */
+        for (i = 0; i < NEPAR; i++)
+            trk[n].p[P_E0 + i] = s->p[n][nc + i];
     }
-    s_own = (uint8_t)(s.own & ((1u << NGROUP) - 1u));
-    ps.cur = (uint8_t)(s.cur % NPRESET);
-    ps_edited = s.edited ? 1u : 0u;
-    name_set(ps.name, name, PS_NAME);
+    s_own = (uint8_t)(s->own & ((1u << NGROUP) - 1u));
+    ps.cur = (uint8_t)(s->cur % NPRESET);
+    ps_edited = s->edited ? 1u : 0u;
+    name_set(ps.name, s->name, PS_NAME);
     par_dirty++;
 }
 
 static void state_save(void)
 {
-    static state_t s;
+    state_t *s = &state_buf;
     uint32_t n, j;
-    memset(&s, 0, sizeof s);
-    s.magic = STATE_MAGIC;
-    s.ng = G_COUNT;
-    s.ns = S_COUNT;
-    s.np = P_COUNT;
-    s.nl = NLAYER;
-    s.cur = ps.cur;
-    s.edited = ps_edited;
-    s.own = s_own;
-    memcpy(s.g, gpar, sizeof gpar);
-    memcpy(s.sg, sglob, sizeof sglob);
-    memcpy(s.so, sown, sizeof sown);
+    memset(s, 0, sizeof *s);
+    s->magic = STATE_MAGIC;
+    s->ng = G_COUNT;
+    s->ns = S_COUNT;
+    s->np = P_COUNT;
+    s->nl = NLAYER;
+    s->cur = ps.cur;
+    s->edited = ps_edited;
+    s->own = s_own;
+    memcpy(s->g, gpar, sizeof gpar);
+    memcpy(s->sg, sglob, sizeof sglob);
+    memcpy(s->so, sown, sizeof sown);
     for (n = 0; n < NLAYER; n++)
-        memcpy(s.p[n], trk[n].p, sizeof trk[n].p);
+        memcpy(s->p[n], trk[n].p, sizeof trk[n].p);
     for (j = 0; j < PS_NAME && ps.name[j]; j++)
-        s.name[j] = ps.name[j];
-    settings_save(&s, sizeof s);
+        s->name[j] = ps.name[j];
+    settings_save(s, sizeof *s);
 }
 
 #if defined(TYPHOON_SIM)

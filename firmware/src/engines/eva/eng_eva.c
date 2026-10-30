@@ -4,7 +4,7 @@
  * destination: the loudness, the cutoff and the vibrato each have their own threshold and curve, so blowing harder
  * is louder, brighter and livelier in different measure. Each follows the breath at once unless LAG / VIB SWELL say
  * otherwise, visibly (until 2026-10-27 fixed attacks / releases under RESPONSE; the presets have them as they were;
- * the breath's own smoothing is global, G_BSMOOTH). No ADSR: breath is the envelope.
+ * the breath's own smoothing is global, source A's SMOOTH). No ADSR: breath is the envelope.
  * typhoon's layer does the rest as for every engine: notes and legato (note_on only for an articulated note), bend and
  * tilt, the breath curve, effects.
  *

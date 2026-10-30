@@ -26,9 +26,10 @@ static uint32_t ms_since(uint32_t t)
 
 static struct {
     uint32_t page, drawn_dirty, drawn_page, drawn_layer, drawn_hdr, hdr, t_meter;
-    int32_t drawn_breath;
+    int32_t drawn_breath, drawn_in;                /* (a curve page's dot as drawn) */
     uint32_t touched_k, t_touched;                 /* the knob turned last, when (its value shows white) */
     uint8_t full;
+    uint8_t src_sel;                               /* CONTROLS: the source turned last (0 .. 3: A .. D): EDIT opens its curve */
     uint8_t solo, solo_mutes[NLAYER];              /* UA_SOLO on: the mutes as they were before */
     uint8_t last[NELEM(BUTTONS)];                  /* a page button: its cycle's page shown last, + 1 (0: none) */
     uint32_t t_down[NELEM(BUTTONS)];               /* a button with a hold: pressed when (0: not pending) */
@@ -215,6 +216,14 @@ static void ui_act(uint32_t i, uint32_t a)
     switch (a) {
     case UA_PAGE: {
         uint32_t start = BUTTONS[i].arg, n;
+        if (BUTTONS[i].btn == BTN_EDIT && ui.page == PG_CONTROLS) {   /* the source turned last: its curve */
+            ui.page = PG_SRC_A + ui.src_sel;
+            break;
+        }
+        if (BUTTONS[i].btn == BTN_EDIT && ui.page >= PG_SRC_A && ui.page <= PG_SRCP_D) {   /* its curve <-> its + */
+            ui.page = PAGES[ui.page].next;
+            break;
+        }
         if (page_in_cycle(start, ui.page)) {       /* again: the next page of the cycle */
             if (PAGES[ui.page].next != PG_STAY)
                 ui.page = PAGES[ui.page].next;
@@ -357,6 +366,8 @@ static void ui_input(void)
             ui_msg("RESET");
             continue;
         }
+        if (st && ui.page == PG_CONTROLS)
+            ui.src_sel = (uint8_t)k;               /* (EDIT: this one's curve) */
         if (st && knob_live(r)) {
             par_step(r, st);
             ui.touched_k = k;
@@ -630,7 +641,8 @@ static void draw_knob_row(uint32_t k)
     const param_desc_t *d = par_desc(r);
     char lab[24], val[24];
     int hot = ui.t_touched && ui.touched_k == k && ms_since(ui.t_touched) < 1500u, dim = knob_follows(r);
-    int here = pr_layer(r) && ((r >> 8) & 0x0Fu) != PR_SEL && par_layer(r) == (uint32_t)gpar[G_LAYER];
+    int here = (pr_layer(r) && ((r >> 8) & 0x0Fu) != PR_SEL && par_layer(r) == (uint32_t)gpar[G_LAYER]) ||
+               (ui.page == PG_CONTROLS && k == ui.src_sel);   /* (CONTROLS: the source EDIT opens) */
     cv_begin(240, 44, C_BLACK);
     if (here)                                      /* (MIX: the layer SELECT is on, the one PLAY mutes) */
         cv_rect(0, 0, 3, 36, C_GLOBAL);
@@ -668,29 +680,34 @@ static void draw_knob_row(uint32_t k)
     cv_blit(0, 58 + k * 45);
 }
 
-/* the breath curve the page edits (its first three knobs: LOW, HIGH, SHAPE): CC2 in (x) -> breath out (y), the
- * live breath as a dot */
+/* the source's curve the page edits (PG_SRC_A ..: LOW, HIGH, SHAPE, OVER): its controller in (x) -> the source out
+ * (y), OVER a line across (XO above it), the live value as a dot */
 #define CRV_W 224
 #define CRV_H 112
+static uint32_t page_src(void) { return (ui.page - PG_SRC_A) % NSRC_CC; }   /* (a PG_SRC_ page's source: 0 .. 3) */
 static void draw_curve(void)
 {
     const pref_t *kk = PAGES[ui.page].k;
-    int32_t x, py, bx, by, lo = par_get(kk[0]), hi = par_get(kk[1]), sh = par_get(kk[2]);
-    uint16_t c = knob_follows(kk[0]) ? C_DIM : C_HI;
+    uint32_t s = page_src();
+    int32_t x, py, bx, by, lo = par_get(kk[0]), hi = par_get(kk[1]), sh = par_get(kk[2]), ov = par_get(kk[3]);
+    uint16_t c = C_HI;
     TP_BOX(240, CRV_H + 8, C_BLACK) {
     py = -1;
     cv_rect(8, 4, 1, CRV_H, C_LINE);
     cv_rect(8, 4 + CRV_H - 1, CRV_W, 1, C_LINE);
     cv_rect(8 + (lo > 0 ? lo : 0) * CRV_W / 127, 4, 1, CRV_H, C_DIM);   /* LOW (below 0: at the edge) and HIGH */
     cv_rect(8 + (hi * CRV_W) / 127, 4, 1, CRV_H, C_DIM);
+    if (ov)                                        /* OVER: XO above it */
+        for (x = 0; x < CRV_W; x += 6)
+            cv_rect(8 + x, 4 + CRV_H - 1 - ov * (CRV_H - 1) / 127, 3, 1, C_AMB);
     for (x = 0; x < CRV_W; x++) {
         int32_t y = (breath_curve_of(x * 32767 / (CRV_W - 1), lo, hi, sh) * (CRV_H - 1)) >> 15, yy = 4 + CRV_H - 1 - y;
         if (py < 0) py = yy;
         cv_rect(8 + x, yy < py ? yy : py, 2, (yy < py ? py - yy : yy - py) + 2, c);
         py = yy;
     }
-    bx = 8 + ((perf_ui.breath_in * (CRV_W - 1)) >> 15);              /* the live breath */
-    by = 4 + CRV_H - 1 - ((perf_ui.breath * (CRV_H - 1)) >> 15);
+    bx = 8 + ((perf_ui.src_in[s] * (CRV_W - 1)) >> 15);              /* the live value */
+    by = 4 + CRV_H - 1 - ((perf_ui.src_out[s] * (CRV_H - 1)) >> 15);
     cv_rect(bx - 3, by - 3, 7, 7, C_WHITE);
     cv_blit(0, 58 + tp_box.top);
     }
@@ -832,8 +849,10 @@ static void ui_draw(void)
             draw_bt();
         if (pg->kind == UK_PERF && fm1_ms % 200u < 40u)   /* (~5 times a second) */
             draw_perf();
-        if (pg->kind == UK_CURVE && perf_ui.breath != ui.drawn_breath) {
-            ui.drawn_breath = perf_ui.breath;
+        if (pg->kind == UK_CURVE && (perf_ui.src_out[page_src()] != ui.drawn_breath ||
+                                     perf_ui.src_in[page_src()] != ui.drawn_in)) {
+            ui.drawn_breath = perf_ui.src_out[page_src()];
+            ui.drawn_in = perf_ui.src_in[page_src()];
             draw_curve();
         }
     }

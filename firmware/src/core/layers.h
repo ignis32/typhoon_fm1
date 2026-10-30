@@ -58,13 +58,19 @@ static track_t trk[NLAYER];
 static volatile uint8_t cc_raw[128];
 static int32_t src_breath;
 
+/* the sources (notes/05-controls.md): the controller described once, in GLO > CONTROLS. BEND (MIDI pitch bend, or the
+ * tilt's CC: G_TILT_*), A .. D (a CC or aftertouch each, through its own curve, OVER and SMOOTH: G_CC_A ..), and AO ..
+ * DO, the top of A .. D past its OVER, 0 .. full from there. By convention (not enforced) A is the breath. Their values
+ * as the audio has them, once a control block (core/layers.c sources_tick): Q15, BEND -32768 .. 32767, the rest
+ * 0 .. 32767 */
+enum { SRC_BEND, SRC_A, SRC_B, SRC_C, SRC_D, SRC_AO, SRC_BO, SRC_CO, SRC_DO, NSRC };
+#define NSRC_CC 4u                                 /* A .. D: a controller each */
+static int32_t src_val[NSRC];
+
 /* the sound's parameters (global, or the preset's own: see the top). New ones go at the end (presets map by index) */
 enum {
-    S_BC_LO, S_BC_HI,                /* GR_CURVE: CC2 below LO counts as nothing, from HI on as full; LO below 0: a head start */
-    S_BC_SHAPE,                      /*   and between: -64 log (fast at first) .. 0 linear .. 63 exponential */
-                                     /*   (S_BSMOOTH was here until 2026-10-23: now G_BSMOOTH, global only) */
-    S_LPF, S_LPRES, S_BR_LP,         /* GR_LP: nothing since 2026-10-28 (the mix's breath LP, now ERS's and FM's own:
-                                      * dsp/breathlp.c); kept, so the saved sounds' S_* after them stay in place */
+    /* (GR_CURVE, the breath curve, and GR_LP, the mix's breath LP, were here until 2026-10-30: the curves are the
+     * sources' now, global, G_LO_A ..; the LP ERS's and FM's own, dsp/breathlp.c) */
     S_DRIVE, S_DRV_AT,               /* GR_DRIVE: overdrive by breath: amount (0 = off), the breath where it starts */
     S_DLY_TIME, S_DLY_FB, S_DLY_TONE, S_DLY_MIX,     /* GR_DELAY */
     S_REV_SIZE, S_REV_DECAY, S_REV_DAMP, S_REV_MIX,  /* GR_REVERB */
@@ -73,9 +79,9 @@ enum {
     S_VOLUME,                        /* GR_VOLUME: the whole sound, after the effects: 100 = as it is */
     S_COUNT
 };
-enum { GR_CURVE, GR_LP, GR_DRIVE, GR_DELAY, GR_REVERB, GR_DETUNE, GR_VOLUME, NGROUP };
+enum { GR_DRIVE, GR_DELAY, GR_REVERB, GR_DETUNE, GR_VOLUME, NGROUP };
 static const uint8_t S_GROUP[S_COUNT] = {
-    GR_CURVE, GR_CURVE, GR_CURVE, GR_LP, GR_LP, GR_LP, GR_DRIVE, GR_DRIVE,
+    GR_DRIVE, GR_DRIVE,
     GR_DELAY, GR_DELAY, GR_DELAY, GR_DELAY, GR_REVERB, GR_REVERB, GR_REVERB, GR_REVERB,
     GR_DETUNE, GR_DETUNE, GR_DETUNE, GR_DETUNE, GR_REVERB, GR_REVERB, GR_VOLUME};
 static int16_t sglob[S_COUNT], sown[S_COUNT];
@@ -84,7 +90,8 @@ static inline int32_t sv(uint32_t i) { return (s_own >> S_GROUP[i] & 1u) ? sown[
 
 /* global parameters (not in a preset) */
 enum {
-    G_BSRC,                          /* where loudness comes from: AUTO (CC2 when it comes, else velocity), CC2, VEL */
+    G_BSRC,                          /* where A comes from: AUTO (its controller once it comes, else the note-on velocity:
+                                      * a keyboard), CC (its controller only), VEL */
     G_BEND,                          /* pitch bend range, semitones */
     G_XPOSE,                         /* transpose, semitones: every note (MIDI in, the keys) */
     G_BLE_P,                         /* BLE-P: OFF, ON: a computer finds the FM-1 and connects (app/ble.c; G_BT, OFF /
@@ -94,10 +101,7 @@ enum {
     G_TILT_DEAD,                     /*   CC units either side of 64 that count as the centre */
     G_TILT_RANGE,                    /*   the bend at the extremes, % of G_BEND (the ESP32 bridge's CC2PB_RANGE_PCT) */
     G_TILT_INV,                      /*   the other way round */
-    G_BREATH_CC,                     /* breath comes on this CC (1 .. 127; 128: channel aftertouch); CC11 by default */
-    G_BSMOOTH,                       /* breath smoothing, ms: the one place breath is smoothed (the CC's 128 steps, a new
-                                      * value every few ms: zipper otherwise). Global only, no preset or engine adds its
-                                      * own (no hidden lags) */
+    /* (G_BREATH_CC and G_BSMOOTH were here until 2026-10-30: A's controller and SMOOTH now, G_CC_A, G_SMOOTH_A) */
     G_LEAP_MODE,                     /* LEAPS (core/leap.c): passing notes on slurs held back: OFF, HOLD */
     G_LEAP_ST,                       /*   the smallest upward slurred jump held back, semitones (13: past an octave) */
     G_LEAP_MS,                       /*   how long it waits for the next note, ms */
@@ -111,7 +115,17 @@ enum {
                                       * one chosen in the BLUETOOTH page's list) */
     G_BLE_AUTO,                      /* AUTO_RECONNECT: OFF (one look), ON (looks whenever no device is connected) */
     G_USB_HOST,                      /* USB HOST (app/usbhost.c): OFF (a computer), ON (a USB MIDI device: the re.corder) */
+    /* the sources A .. D (GLO > CONTROLS, and each one's curve pages; notes/05-controls.md), four of each, in order: */
+    G_CC_A, G_CC_B, G_CC_C, G_CC_D,  /* the controller: 0 OFF, 1 .. 127 a CC, 128 channel aftertouch (A: CC11, the breath;
+                                      * B: CC52, the re.corder's rotation, as BEND's tilt) */
+    G_LO_A, G_LO_B, G_LO_C, G_LO_D,  /* the curve: below LOW nothing (below 0: a head start, a held note sounds) .. */
+    G_HI_A, G_HI_B, G_HI_C, G_HI_D,  /*   .. from HIGH on full .. */
+    G_SHP_A, G_SHP_B, G_SHP_C, G_SHP_D,   /* .. and between: -64 log (fast at first) .. 0 linear .. 63 exponential */
+    G_OVER_A, G_OVER_B, G_OVER_C, G_OVER_D,   /* OVER: 0 off; 1 .. 126: past it (after the curve), XO runs 0 .. full to
+                                      * the top (an overblow: growl, drive), the source itself on to full */
+    G_SMOOTH_A, G_SMOOTH_B, G_SMOOTH_C, G_SMOOTH_D,   /* a one-pole on the source, ms (0: none, the default: no hidden
+                                      * lags; a source over 0 is a row in notes/03-lag-watch.md) */
     G_COUNT                          /* (new ones at the end: the saved state has room for G_SAVED) */
 };
-#define G_SAVED 24                                 /* (16 until 2026-10-24, 12 until 2026-10-23: the state 0x7A08 on) */
+#define G_SAVED 48                                 /* (24 until 2026-10-30, 16 until 2026-10-24, 12 until 2026-10-23) */
 static int16_t gpar[G_COUNT];

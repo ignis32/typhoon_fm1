@@ -105,8 +105,9 @@ export function boot(wasm = process.env.SIM || 'build/sim/typhoon.wasm', quiet =
   };
   if (quiet && ex.sim_init(44100) !== 0) throw new Error('sim_init failed');
   if (!quiet) t.check(ex.sim_init(44100) === 0, 'boots');
-  // the tests (and the recorded takes) give breath on CC2: BREATH CC set so; the firmware's own default kept here
-  t.breathCcDefault = ex.sim_par_get(G(C.G_BREATH_CC));
-  ex.sim_par_set(G(C.G_BREATH_CC), 2);
+  // the tests (and the recorded takes) give breath on CC2: source A's controller set so (GLO > CONTROLS); the
+  // firmware's own default kept here
+  t.breathCcDefault = ex.sim_par_get(G(C.G_CC_A));
+  ex.sim_par_set(G(C.G_CC_A), 2);
   return t;
 }

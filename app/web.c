@@ -21,8 +21,8 @@ __attribute__((used, visibility("default"))) uint32_t web_presets_hash(void)
         h = (h ^ s[i]) * 16777619u;
     return h;
 }
-/* GLOBAL > BREATH CC: what the page's breath slider sends on (1..127 a CC, 128 channel aftertouch) */
-__attribute__((used, visibility("default"))) uint32_t web_breath_cc(void) { return (uint32_t)gpar[G_BREATH_CC]; }
+/* GLO > CONTROLS, A: what the page's breath slider sends on (1..127 a CC, 128 channel aftertouch; 0: A is OFF, CC11) */
+__attribute__((used, visibility("default"))) uint32_t web_breath_cc(void) { return gpar[G_CC_A] ? (uint32_t)gpar[G_CC_A] : 11u; }
 /* after the page wrote saved presets back: the slots' index again, as at boot (core/presets.c state_load) */
 __attribute__((used, visibility("default"))) void web_presets_rescan(void)
 {

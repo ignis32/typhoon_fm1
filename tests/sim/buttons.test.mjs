@@ -8,9 +8,23 @@ export default function (t) {
   const cycle = (b, n) => { const s = []; for (let i = 0; i < n; i++) { press(b); s.push(ex.sim_page_cur()); } return s; };
   const name = (pg) => Object.keys(C).find((k) => k.startsWith('PG_') && C[k] === pg) || pg;
 
-  const glo = cycle(C.BTN_GLO, 10);
-  const wantGlo = [C.PG_GLOBAL, C.PG_BT, C.PG_TILT, C.PG_G_BREATH, C.PG_G_CURVE, C.PG_LEAP, C.PG_USB, C.PG_USBH, C.PG_PERF, C.PG_GLOBAL];
-  check(glo.join() === wantGlo.join(), `GLO: the global settings and the breath curve, round (${glo.map(name).join(' ')})`);
+  const glo = cycle(C.BTN_GLO, 9);
+  const wantGlo = [C.PG_GLOBAL, C.PG_BT, C.PG_TILT, C.PG_CONTROLS, C.PG_LEAP, C.PG_USB, C.PG_USBH, C.PG_PERF, C.PG_GLOBAL];
+  check(glo.join() === wantGlo.join(), `GLO: the global settings, BEND and CONTROLS among them, round (${glo.map(name).join(' ')})`);
+
+  // CONTROLS: EDIT opens the curve of the source turned last, EDIT again its + page and back; GLO back to CONTROLS;
+  // ENV: A's curve (the breath's)
+  cycle(C.BTN_GLO, 3);
+  const ctl = ex.sim_page_cur(), cc = ex.sim_par_get(t.G(C.G_CC_C));
+  ex.sim_enc(C.ENC_KNOB1 + 2, 1); run(30);
+  const e1 = cycle(C.BTN_EDIT, 3);
+  press(C.BTN_GLO);
+  const ctlBack = ex.sim_page_cur();
+  ex.sim_par_set(t.G(C.G_CC_C), cc);
+  press(C.BTN_ENV);
+  check(ctl === C.PG_CONTROLS && e1.join() === [C.PG_SRC_C, C.PG_SRCP_C, C.PG_SRC_C].join() && ctlBack === C.PG_CONTROLS &&
+    ex.sim_page_cur() === C.PG_SRC_A,
+    `CONTROLS: EDIT opens C's curve, then C + (${e1.map(name).join(' ')}); GLO back (${name(ctlBack)}); ENV: ${name(ex.sim_page_cur())}`);
 
   const rec = cycle(C.BTN_REC, 6);                // (BREATH LP first until 2026-10-28: now ERS's and FM's EDIT 5)
   const wantRec = [C.PG_G_DRIVE, C.PG_G_DETUNE, C.PG_G_DELAY, C.PG_G_REVERB, C.PG_G_REVERB2, C.PG_G_DRIVE];

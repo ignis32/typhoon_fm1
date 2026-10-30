@@ -62,9 +62,15 @@ The version is in `VERSION` (every build carries it: the header at power-on, Sys
 marked `*`, the signal in bars), FORGET; OCT+ takes the entry, OCT- shuts the list. **AUTO_RECONNECT** (KNOB 4) ON:
 whenever no device is connected (power-on, one gone) it looks until one is; OFF: one look. Under each side its state
 in words, below them the log. Both OFF: the radio off. USB-MIDI and TRS MIDI always play too, on any channel. Notes are mono,
-the last one wins, a slur is legato; breath is CC11 by default (GLO → BREATH CC: any CC, or AT for channel aftertouch;
-CC2 until 2026-10-24); the breath curve starts at LOW 0 (8 until then); the
-re.corder's tilt (CC52) becomes pitch bend (GLO → TILT>BEND: any CC, or OFF).
+the last one wins, a slur is legato.
+
+**Controls** (GLO → CONTROLS; the design: `notes/05-controls.md`). The controller is described once, as sources:
+**BEND** (MIDI pitch bend, or a CC centred on 64 such as the re.corder's tilt, CC52: GLO → BEND) and **A, B, C, D**,
+each a CC, AT (channel aftertouch) or OFF. By convention A is the breath (CC11 by default) and B the re.corder's
+rotation (CC52, the same controller as BEND). EDIT on CONTROLS opens the curve of the source turned last (ENV opens
+A's): LOW, HIGH, SHAPE and **OVER**; EDIT again: SMOOTH (0, none, by default) and, for A, where it comes from (AUTO:
+its controller, else the note-on velocity). Past OVER a source's top end is a source of its own, **AO .. DO**, from 0
+to full (an overblow: growl, drive); the source itself goes on to full. Curves are global: no preset has its own.
 
 **USB audio** (GLO → USB AUDIO): **USB IN**, the computer's audio through the FM-1, and **USB OUT**, the FM-1 recorded
 on the computer, each OFF (the default: the computer gets no such audio device, so it keeps its own defaults), MUTE
@@ -86,9 +92,8 @@ blocks not done in time since the reset, each heard as a click, and says how lon
 to reset. Over USB: `tools/presets.py stats`.
 
 **The sound.** A preset is the whole sound: three layers (engine and its knobs, level, transpose, pan, envelope, how
-breath moves them) and a name. The sound after the layers (breath curve, breath LP, drive, detune, delay, reverb,
-volume) is in groups: each has a **global** copy (the curve on GLO beside BREATH IN, the effects on REC; an amber
-header), and a preset uses it (values dim, a
+breath moves them) and a name. The sound after the layers (drive, detune, delay, reverb, volume) is in groups: each
+has a **global** copy (the effects on REC; an amber header), and a preset uses it (values dim, a
 GLOBAL tag) until a knob is turned on the preset's page — then the group is the preset's **own** (OWN tag). Holding
 the page's button gives it back to the global one.
 
@@ -99,13 +104,13 @@ the page's button gives it back to the global one.
 | ALGORITHM encoder | the layer's engine (the last place: OFF) |
 | KNOB 1-4 | the page's four values |
 | HOME | BREATH: how the layer follows breath (BR>AMP, BR>TONE, BR>SHP). ERS's and FM's breath LP (cutoff, resonance, breath amount) is their EDIT 5 |
-| ENV | breath CURVE · hold: back to global |
+| ENV | A's curve (the breath's) → A + (SMOOTH, A FROM) |
 | EDIT | the engine's knobs, page by page (EDIT 1 .. 5, the empty ones passed by) → TONE (after the engine: OFF, FILTER LP/BP/HP, SWEEP, TALK, SUB OCT) |
 | FX | DRIVE → DETUNE → DELAY → REVERB → REVERB + (TYPE: PLATE / HALL, PRE-DLY), again and again · hold: back to global |
 | LFO | ENVELOPE (per layer, drawn): ATTACK, DECAY, SUSTAIN, RELEASE → ENVELOPE + (DELAY, BR>AMP). Restarts on a fresh attack, legato runs on |
 | ARP | LAYER (engine, level, transpose, pan) → LAYER + (breath → tone / shape, filter type, fine) |
 | SEQ | MIX: the 3 levels, each with its engine, and the preset's VOLUME (KNOB 4: the whole sound, effects too; 100 = as it is) · hold: VOLUME back to global |
-| GLO | the global settings: GLOBAL (breath source, bend, transpose) → BLUETOOTH (BLE-P, BLE-C, the list, AUTO_RECONNECT) → TILT>BEND → BREATH IN (BREATH CC, LOUDNESS) → CURVE (the global breath curve) → LEAPS → USB AUDIO → USB HOST → PERFORMANCE (load, xruns) · hold: GLOBAL TO FACTORY ? |
+| GLO | the global settings: GLOBAL (bend range, transpose) → BLUETOOTH (BLE-P, BLE-C, the list, AUTO_RECONNECT) → BEND (the tilt's CC, DEAD, RANGE, INVERT) → CONTROLS (A .. D; EDIT: the one turned last's curve, then its +) → LEAPS → USB AUDIO → USB HOST → PERFORMANCE (load, xruns) · hold: GLOBAL TO FACTORY ? |
 | REC | the global effects: DRIVE → DETUNE → DELAY → REVERB → REVERB + (what a preset without its own group plays) · hold: all notes off |
 | OCT− / OCT+ | press: transpose a semitone (when let go) · hold: an octave (or SEL + press) · both: 0. Cuts the sounding note |
 | PLAY | mute the layer · hold: solo it (again: back; PLAY blinks meanwhile) |
