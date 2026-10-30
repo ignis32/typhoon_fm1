@@ -140,6 +140,13 @@ EXPORT_AS(sim_engine_preset) const char *sim_engine_preset(uint32_t l, uint32_t 
     e = layer_engine(l);
     if (k >= e->npresets) return 0;
     for (i = 0; i < NEPAR; i++) trk[l].p[P_E0 + i] = e->presets[k].e[i];
+    {
+        uint8_t miss;
+        routes_engine(l, eng_index((uint32_t)trk[l].p[P_ENGINE], &miss));   /* (the engine's routes, then the preset's
+                                                                          * depths with breath as routes, as the
+                                                                          * factory presets: core/routes.c) */
+        routes_preset(l);
+    }
     par_dirty++;
     return e->presets[k].name;
 }

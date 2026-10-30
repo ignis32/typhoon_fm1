@@ -50,12 +50,8 @@ typedef struct track {
 } track_t;
 static track_t trk[NLAYER];
 
-/* the performance's sources, raw, for an engine with controls of its own (engine_t.audio: PAN's bend and vibrato) and
- * the routes to come (sources to an engine's controls, many to many): every controller's last value as it came
- * (cc_raw, 7 bits: app.c midi_in writes it, the audio reads it; the tilt's and the breath's too), and the breath after
- * the curve (src_breath, Q15: core/layers.c, before engine_t.audio runs) */
-static volatile uint8_t cc_raw[128];
-static int32_t src_breath;
+/* (cc_raw, every controller as it came, and src_breath, the breath for PANFLUTE, were here until 2026-10-30: no engine
+ * reads a source now, its routes say what reaches it: layer_in) */
 
 /* the sources (notes/05-controls.md): the controller described once, in GLO > CONTROLS. BEND (MIDI pitch bend, or the
  * tilt's CC: G_TILT_*), A .. D (a CC or aftertouch each, through its own curve, OVER and SMOOTH: G_CC_A ..), and AO ..
@@ -76,13 +72,21 @@ enum {
     T_PAN,                           /* the knob PAN, moved */
     T_TONE_A, T_TONE_B, T_TONE_C,    /* TONE's knobs, moved (the ones its type marks MOD) */
     T_EXCITE,                        /* what breath moves in the engine (vmod.shape: FM's index, ERS's pressure, EVA's
-                                      * slots, ANALOG's PWM): 100 % = the old BR>SHP 63, all of it */
+                                      * slots, ANALOG's PWM; PANFLUTE's breath): 100 % = the old BR>SHP 63, all of it */
+    T_IN1, T_IN2, T_IN3,             /* the engine's own inputs (engine_t.in: PANFLUTE's LIP, WOBBLE, LFO DEPTH) */
     T_KNOB = 16,                     /* + k: the engine's knob P_E0 + k, moved */
     NTARGET = 36                     /* (T_KNOB + 20 knobs; a number: tools/consts.mjs reads it) */
 };
 #define NCELL 32u
 typedef struct { uint8_t lt, src; int8_t amt; } cell_t;   /* lt: layer << 6 | target */
 static cell_t cells[NCELL];
+/* each layer's inputs as its routes made them, for an engine that takes them itself (PANFLUTE): [0] EXCITE, [1 .. 3]
+ * T_IN1 .. T_IN3, Q15; layer_in_w: their routes' amounts, |%| added (the sources as one: layer_in x 100 / w; an input
+ * measured on its source, as PANFLUTE's LFO DEPTH from CENTRE, then scaled by w); layer_in_on bit k: a route reaches
+ * [k] (none: the engine keeps its own rest) */
+static int32_t layer_in[NLAYER][4];
+static int16_t layer_in_w[NLAYER][4];
+static uint8_t layer_in_on[NLAYER];
 
 /* the sound's parameters (global, or the preset's own: see the top). New ones go at the end (presets map by index) */
 enum {

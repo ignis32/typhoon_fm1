@@ -52,12 +52,14 @@
  *                     resonances), AIR (breath noise on top, around the note), GROWL (a growl / flutter: the
  *                     pressure flutters ~30 Hz, a half-pitch roughness)
  *          AMOUNT     the shaper's (+ vmod.cutoff: BR>TONE moves it)
- * Page 3:  VIB        vibrato depth (0 .. 50 cents): in above 55 % of a full tone's pressure, as fast as VIB SWELL says
+ * Page 3:  VIB        vibrato depth (0 .. 50 cents), in from each tongued note as fast as VIB SWELL says (A -> VIB: with
+ *                     breath; in above 55 % of a full tone's pressure until 2026-10-30)
  *          RATE       its rate, 3 .. 8 Hz (64: 5.5)
  *          TONGUE     a kick of the pressure on an articulated note, up to +50 %, gone in 40 ms: a bark, a bite
  *          LAG        how slowly the pressure follows the breath (0: at once .. ~90 ms): a heavier instrument. A lag
  *                     of the engine's own, visible (gone 2026-10-23 .. 28; the presets that had it have it again)
- * Page 5:  LP CUT, LP RES, BR>LP  the breath low-pass (dsp/breathlp.c: the mix's until 2026-10-28)
+ * Page 5:  LP CUT, LP RES  the breath low-pass (dsp/breathlp.c: the mix's until 2026-10-28; A -> LP CUT opens it, BR>LP
+ *                     until 2026-10-30)
  *          VIB SWELL  how long the vibrato takes to come in (0: at once; 64: 400 ms, out in 150, as it was fixed
  *                     until 2026-10-28; 127: ~1.6 s)
  * Page 4:  AIR        the breath noise (the jet's, the mouth's, the sax's air, the AIR shaper's): 0 none, 64 as

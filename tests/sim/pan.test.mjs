@@ -2,7 +2,7 @@
 // Copyright (C) 2026 ignis32
 // PANFLUTE (Denis Rosset's pan flute, engines/pan/): silent without breath, speaks with it and stops with it; in tune;
 // keys outside his pipes folded by octaves into them; a hop (a slur) sounds the new pipe; one layer at a time (a
-// second is refused); his bend follows the controller BEND CC names.
+// second is refused); his bend and vibrato follow their routes (LIP, LFO DEPTH).
 export default function (t) {
   const { ex, C, L1, SG, check, run } = t;
   const pan = t.engine(C.ENG_ID_PAN);
@@ -43,16 +43,19 @@ export default function (t) {
   fresh();
   ex.sim_par_set(t.L2(C.P_ENGINE), pan);
   check(ex.sim_par_get(t.L2(C.P_ENGINE)) !== C.ENG_ID_PAN, 'PANFLUTE: a second layer is refused');
-  // the bend: BEND CC 1, the lip from his markers (rest 0 .. full 90 = a whole tone down)
+  // the bend: C (CC 1) -> LIP, the lip from his markers (rest 0 .. full 90 = a whole tone down)
   fresh();
-  ex.sim_par_set(L1(C.P_E0 + 8), 1);
+  ex.sim_par_set(t.G(C.G_CC_C), 1);
+  ex.sim_par_set(t.CELL(0, C.SRC_C, C.T_IN1), 100);
   ex.sim_midi(0xB0, 1, 0); ex.sim_midi(0x90, 79, 80); ex.sim_midi(0xB0, 2, 60); run(400);
   const f0 = t.pitch(300, 600, 1000);
   ex.sim_midi(0xB0, 1, 33); run(400);
   const f1 = t.pitch(300, 600, 1000);
   ex.sim_midi(0xB0, 2, 0); ex.sim_midi(0x80, 79, 0); run(1500);
-  check(cents(f1, f0) < -60 && cents(f1, f0) > -140, `PANFLUTE: BEND CC 1 at the semitone's plateau bends ${cents(f1, f0).toFixed(0)} cents`);
-  // VIB MODE LFO, VIB CC 52 (a gyro, CENTRE 64): no vibrato at the centre, a swing tilted all the way; VIB CC 0: always
+  ex.sim_par_set(t.G(C.G_CC_C), 0);
+  check(cents(f1, f0) < -60 && cents(f1, f0) > -140, `PANFLUTE: C > LIP at the semitone's plateau bends ${cents(f1, f0).toFixed(0)} cents`);
+  // B (CC 52, a gyro) -> LFO DEPTH, CENTRE 64: no vibrato at the centre, a swing tilted all the way; CENTRE 0: B's value
+  // is the depth (B down: none)
   const grab = (ms) => { const x = []; for (let i = 0; i < Math.round((ms * 44.1) / 128); i++) { ex.sim_render(128); x.push(...new Float32Array(ex.memory.buffer, ex.sim_out_l(), 128)); } return x; };
   const swing = (ms) => {                          // the pitch's swing, cents: G5's period by autocorrelation (parabola-
     const x = grab(ms), W = 1764, P = 44100 / hz(79), f = [];   // refined) in 40 ms windows every 10 ms (the breath's
@@ -65,14 +68,15 @@ export default function (t) {
     }
     return 1200 * Math.log2(Math.max(...f) / Math.min(...f));
   };
-  const lfo = (cc, v) => {
+  const lfo = (centre, v) => {
     fresh();
-    ex.sim_par_set(L1(C.P_E0 + 9), 1); ex.sim_par_set(L1(C.P_E0 + 10), cc);
+    ex.sim_par_set(t.CELL(0, C.SRC_B, C.T_IN3), 59); ex.sim_par_set(L1(C.P_E0 + 10), centre);
     ex.sim_midi(0xB0, 52, v); ex.sim_midi(0x90, 79, 80); ex.sim_midi(0xB0, 2, 60); run(500);
     const s = swing(800);
     ex.sim_midi(0xB0, 2, 0); ex.sim_midi(0x80, 79, 0); run(1500);
     return s;
   };
-  const s64 = lfo(52, 64), s127 = lfo(52, 127), s0 = lfo(0, 64);
-  check(s64 < 8 && s127 > 15 && s0 > 15, `PANFLUTE LFO: the gyro centred ${s64.toFixed(1)} cents, tilted ${s127.toFixed(1)}, VIB CC 0 (always) ${s0.toFixed(1)}`);
+  const s64 = lfo(64, 64), s127 = lfo(64, 127), s0 = lfo(0, 127), sd = lfo(0, 0);
+  check(s64 < 8 && s127 > 15 && s0 > 15 && sd < 8,
+    `PANFLUTE LFO: B > LFO DEPTH 59 %, CENTRE 64: the gyro centred ${s64.toFixed(1)} cents, tilted ${s127.toFixed(1)}; CENTRE 0: B up ${s0.toFixed(1)}, down ${sd.toFixed(1)}`);
 }

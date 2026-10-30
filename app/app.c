@@ -219,8 +219,6 @@ static void midi_in(uint32_t st, uint32_t d1, uint32_t d2)
 {
     uint32_t ty = st & 0xF0u;
     uint32_t s, took = 0;
-    if (ty == 0xB0u)
-        cc_raw[d1 & 127u] = (uint8_t)d2;           /* (every controller as it came: core/layers.h, an engine's sources) */
     for (s = 0; s < NSRC_CC; s++) {                /* the sources A .. D (GLO > CONTROLS): a CC, or aftertouch (128) */
         int32_t cc = gpar[G_CC_A + s];
         if ((ty == 0xB0u && cc > 0 && cc < 128 && d1 == (uint32_t)cc) || (ty == 0xD0u && cc == 128)) {

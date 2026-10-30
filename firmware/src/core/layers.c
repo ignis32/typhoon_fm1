@@ -293,8 +293,8 @@ static void notes_event(const pev_t *ev)
     }
 }
 
-/* source A + s, Q15, after its curve, before SMOOTH (src_breath: A, for an engine with controls of its own). A by
- * G_BSRC: AUTO its controller once it came (in the last 3 s), else the note-on velocity */
+/* source A + s, Q15, after its curve, before SMOOTH. A by G_BSRC: AUTO its controller once it came (in the last 3 s),
+ * else the note-on velocity. A source with no controller (OFF) is 0 */
 static int32_t src_in(uint32_t s)
 {
     int32_t src = gpar[G_BSRC], x;
@@ -302,7 +302,7 @@ static int32_t src_in(uint32_t s)
     /* (signed: a value taken at the audio block's start is stamped pf.blocks | 1, one ahead of the count until its
      * first control block; unsigned, that read as long ago and the velocity blew for a block) */
     if (use_cc)
-        x = pf.raw[s];
+        x = gpar[G_CC_A + s] ? pf.raw[s] : 0;
     else
         x = pf.gate ? (int32_t)pf.vel * 32767 / 127 : 0;
     perf_ui.src_in[s] = x;
@@ -310,7 +310,6 @@ static int32_t src_in(uint32_t s)
         x = src_curve(s, x);                       /* (velocity is already what the player meant) */
     return x;
 }
-static int32_t breath_src(void) { return src_in(0); }
 /* the sources, once a block: A .. D smoothed (G_SMOOTH_x), their XO past OVER; A is pf.breath */
 static void sources_tick(void)
 {
@@ -331,12 +330,13 @@ static void sources_tick(void)
 #define NCB (APP_BLOCK / CTL)
 static struct {
     int8_t owner;
-    struct { vmod_t m; int32_t qgain, br; uint8_t on; } cb[NCB];
+    struct { vmod_t m; int32_t qgain, tin; uint8_t on; } cb[NCB];
     int32_t fxbr[NCB];                             /* the breath the effects had in each control block */
 } lblk = {-1};
 
-/* a layer's control block from its engine on: the render, the engine's breath LP, TONE, level and pan into the mix */
-static void layer_out(uint32_t l, const engine_t *e, const vmod_t *mv, int32_t qgain, int32_t br, int32_t *outl,
+/* a layer's control block from its engine on: the render, the engine's breath LP, TONE (tin: what its routes move its
+ * CUTOFF with, for SWEEP: route_t.tone_in), level and pan into the mix */
+static void layer_out(uint32_t l, const engine_t *e, const vmod_t *mv, int32_t qgain, int32_t tin, int32_t *outl,
                       int32_t *outr)
 {
     static int32_t buf[CTL];
@@ -347,9 +347,10 @@ static void layer_out(uint32_t l, const engine_t *e, const vmod_t *mv, int32_t q
     uint32_t i;
     memset(buf, 0, sizeof buf);
     e->render(t, &t->v[0], buf, CTL, &m);
-    if (e->blp)                                    /* the engine's breath LP, on its knobs (dsp/breathlp.c) */
-        blp_block(&lay[l].blp, buf, p[P_E0 + e->blp - 1u], p[P_E0 + e->blp], p[P_E0 + e->blp + 1u], br);
-    tone_block(l, buf, CTL, p, &m, br);            /* the TONE stage (core/tone.c) */
+    if (e->blp)                                    /* the engine's breath LP, on its knobs (dsp/breathlp.c; its CUT moved
+                                                    * by its routes, A -> LP CUT by default) */
+        blp_block(&lay[l].blp, buf, p[P_E0 + e->blp - 1u], p[P_E0 + e->blp]);
+    tone_block(l, buf, CTL, p, &m, tin);           /* the TONE stage (core/tone.c) */
     if (qgain != 32768) {                          /* (the quirk's level) */
         gl = (gl * qgain) >> 15;
         gr = (gr * qgain) >> 15;
@@ -362,11 +363,12 @@ static void layer_out(uint32_t l, const engine_t *e, const vmod_t *mv, int32_t q
 
 /* one control block (number cb of the audio block) of every layer, added to l[] and r[] (CTL frames, Q15); the layer
  * of a whole-block engine (lblk.owner) is kept for the second pass */
-static void layers_block(int32_t *outl, int32_t *outr, uint32_t cb)
+static void layers_block(int32_t *outl, int32_t *outr, uint32_t cb, int tick)   /* tick 0: the sources ticked already */
 {
     uint32_t l;
     pf.blocks++;
-    sources_tick();
+    if (tick)
+        sources_tick();
     lblk.fxbr[cb] = pf.breath;
     perf_ui.note = pf.note;
     perf_ui.gate = pf.gate;
@@ -464,12 +466,12 @@ static void layers_block(int32_t *outl, int32_t *outr, uint32_t cb)
         if (e->audio) {                            /* rendered on core 2 meanwhile: its chain in the second pass */
             lblk.cb[cb].m = m;
             lblk.cb[cb].qgain = qgain;
-            lblk.cb[cb].br = pf.breath;
+            lblk.cb[cb].tin = rt.tone_in;
             lblk.cb[cb].on = 1;
             routes_restore(l, &rt, orig);
             continue;
         }
-        layer_out(l, e, &m, qgain, pf.breath, outl, outr);
+        layer_out(l, e, &m, qgain, rt.tone_in, outl, outr);
         routes_restore(l, &rt, orig);
     }
 }
@@ -503,16 +505,21 @@ static void layers_audio(int32_t *out, uint32_t n)
             break;
         }
     }
-    if (be) {
+    if (be) {                                      /* its controls now, from the sources as they are (this block's first
+                                                    * tick, here: no later than the other layers'), through its routes */
+        route_t rt;
+        int16_t orig[P_COUNT];
         for (b = 0; b < NCB; b++)
             lblk.cb[b].on = 0;
-        src_breath = breath_src();
+        sources_tick();
+        routes_apply((uint32_t)lblk.owner, be, &rt, orig);
         out2 = be->audio(&trk[lblk.owner], n);     /* (core 2 renders it from here) */
+        routes_restore((uint32_t)lblk.owner, &rt, orig);
     }
     for (b = 0; b + CTL <= n; b += CTL) {
         memset(l, 0, sizeof l);
         memset(r, 0, sizeof r);
-        layers_block(l, r, b / CTL);
+        layers_block(l, r, b / CTL, !(be && b == 0));
         if (be) {                                  /* (the second pass mixes it in) */
             memcpy(ml + b, l, sizeof l);
             memcpy(mr + b, r, sizeof r);
@@ -528,16 +535,23 @@ static void layers_audio(int32_t *out, uint32_t n)
         return;
     if (out2)
         be->audio_done(n);                         /* (waits for core 2) */
-    for (b = 0; b + CTL <= n; b += CTL) {
-        memcpy(l, ml + b, sizeof l);
-        memcpy(r, mr + b, sizeof r);
-        if (lblk.cb[b / CTL].on)
-            layer_out((uint32_t)lblk.owner, be, &lblk.cb[b / CTL].m, lblk.cb[b / CTL].qgain, lblk.cb[b / CTL].br, l, r);
-        fx_block(l, r, lblk.fxbr[b / CTL]);
-        for (i = 0; i < CTL; i++) {
-            out[2u * (b + i)] += soft_knee(l[i], 26000);
-            out[2u * (b + i) + 1u] += soft_knee(r[i], 26000);
+    {
+        route_t rt;                                /* (its PAN and TONE, moved by its routes: the block's end's) */
+        int16_t orig[P_COUNT];
+        routes_apply((uint32_t)lblk.owner, be, &rt, orig);
+        for (b = 0; b + CTL <= n; b += CTL) {
+            memcpy(l, ml + b, sizeof l);
+            memcpy(r, mr + b, sizeof r);
+            if (lblk.cb[b / CTL].on)
+                layer_out((uint32_t)lblk.owner, be, &lblk.cb[b / CTL].m, lblk.cb[b / CTL].qgain, lblk.cb[b / CTL].tin, l,
+                          r);
+            fx_block(l, r, lblk.fxbr[b / CTL]);
+            for (i = 0; i < CTL; i++) {
+                out[2u * (b + i)] += soft_knee(l[i], 26000);
+                out[2u * (b + i) + 1u] += soft_knee(r[i], 26000);
+            }
         }
+        routes_restore((uint32_t)lblk.owner, &rt, orig);
     }
 }
 

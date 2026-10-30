@@ -156,6 +156,10 @@ typedef struct {                 /* an engine (engines.c ENGINES[]; the eng_*.c 
      * lowest; core/params.c: a second is refused) */
     int (*audio)(struct track *t, uint32_t n);
     void (*audio_done)(uint32_t n);
+    /* typhoon: the engine's inputs beyond EXCITE, routes' targets (core/routes.c T_IN1 ..; 0: none): their names on
+     * HOME's grid; the values (Q15, the cells' sum) in layer_in[] (core/layers.h) each control block, and before
+     * engine_t.audio */
+    const char *in[3];
 } engine_t;
 
 #endif /* FELUCCA_ENGINE_H */

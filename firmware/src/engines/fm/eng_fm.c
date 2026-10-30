@@ -14,7 +14,8 @@
 static const char *const N_FM_RATIO[] = {"0.5", "1", "1.5", "2", "3", "4", "5", "7"};
 static const uint16_t FM_RATIO_Q8[8] = {128, 256, 384, 512, 768, 1024, 1280, 1792};
 
-/* (EDIT 5, the breath LP, at the mix's old one: LP CUT 60, LP RES 20, BR>LP +40) */
+/* (EDIT 5, the breath LP, at the mix's old one: LP CUT 60, LP RES 20, BR>LP +40: its 40 a route now, A -> LP CUT,
+ * core/routes.c routes_preset) */
 static const preset_t FM_PRESETS[] = {
     {"BRASS", {40, 1, 10, 0, 10, 40, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 60, 20, 40}, {0, 0, 127, 20}, 0, 1, {0}, 0},
     {"REED", {30, 3, 30, 0, 20, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 60, 20, 40}, {0, 0, 127, 20}, 0, 1, {0}, 0},

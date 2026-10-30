@@ -12,8 +12,8 @@
  * params.c layers_defaults) and what a missing engine plays.
  *
  * The engines' UI, the same for all (ui/layout.h): two pages of four knobs, page 1 the tone, page 2 colour and
- * extras; page 1's first knob (P_E0) is what breath moves (each engine adds vmod.shape to it), and br_shp below
- * is how much breath moves it by default (the layer's BR>SHP when the engine is picked).
+ * extras; page 1's first knob (P_E0) is what EXCITE moves (each engine adds vmod.shape to it: the layer's routes,
+ * core/routes.c, A -> EXCITE by default).
  *
  * To add an engine: engines/<name>/eng_<name>.c with its engine_t, a new id below (never reuse a number),
  * a block in each list, its name in eng_id_name and in profiles/. */
@@ -41,24 +41,23 @@ enum { ENG_ID_OFF = 0, ENG_ID_SINE = 1, ENG_ID_ANALOG = 2, ENG_ID_NOISE = 3, ENG
 #include "pan/eng_pan.c"                   /* Denis Rosset's pan flute (MIT, pan/denis/), on the second core */
 #endif
 
-/* each engine's routes when a layer takes it (core/routes.c routes_engine): A -> EXCITE at br_shp % (0: none), and A
- * -> its knob br_knob at 31 % (-1: none: the knob the layer's BR>TONE +40 moved until 2026-10-30, vmod.cutoff). excite:
- * the engine has an EXCITE (vmod.shape), offered on the grid */
-static const struct { uint8_t id; int8_t br_shp, br_knob; uint8_t excite; const engine_t *e; } ENGINES[] = {
+/* excite: the engine has an EXCITE (a route's target, HOME's grid); pitch: typhoon's pitch reaches it (PITCH, the
+ * bend, FINE: not PANFLUTE's pipes, cut to their notes). Its routes when a layer takes it: core/routes.c ROUTE_DEFAULTS */
+static const struct { uint8_t id, excite, pitch; const engine_t *e; } ENGINES[] = {
 #if TYPHOON_ENG_FM
-    {ENG_ID_FM, 63, -1, 1, &ENG_FM},       /* (first: the INIT sound, what a missing engine plays; BR>SHP 40 was 63 %) */
+    {ENG_ID_FM, 1, 1, &ENG_FM},            /* (first: the INIT sound, what a missing engine plays) */
 #endif
 #if TYPHOON_ENG_ANALOG
-    {ENG_ID_ANALOG, 0, 4, 1, &ENG_ANALOG}, /* (its EXCITE is PWM, none by default; breath works on its filter: CUT) */
+    {ENG_ID_ANALOG, 1, 1, &ENG_ANALOG},    /* (its EXCITE is PWM) */
 #endif
 #if TYPHOON_ENG_ERS
-    {ENG_ID_ERS, 100, 7, 1, &ENG_ERS},    /* (breath is the pressure: all of it; BR>TONE moved its shaper's AMOUNT) */
+    {ENG_ID_ERS, 1, 1, &ENG_ERS},          /* (the pressure) */
 #endif
 #if TYPHOON_ENG_EVA
-    {ENG_ID_EVA, 100, -1, 1, &ENG_EVA},   /* (breath: the slots, all of it) */
+    {ENG_ID_EVA, 1, 1, &ENG_EVA},          /* (the slots) */
 #endif
 #if TYPHOON_ENG_PAN
-    {ENG_ID_PAN, 0, -1, 0, &ENG_PAN},     /* (breath is his pressure, his own way: no EXCITE yet) */
+    {ENG_ID_PAN, 1, 0, &ENG_PAN},          /* (his breath; his LIP and WOBBLE: engine_t.in) */
 #endif
 };
 #define NENGINES ((uint32_t)NELEM(ENGINES))

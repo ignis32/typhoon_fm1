@@ -177,11 +177,14 @@ static void factory_apply(uint32_t k)
             group_own(S_GROUP[f[j].i]);
             sown[f[j].i] = f[j].v;
             break;
-        case FP_CELL:
-            cell_set(l, f[j].i, (uint32_t)f[j].v >> 8 & 15u, (int8_t)(f[j].v & 0xFF));
-            break;
         }
     }
+    for (j = 0; j < NLAYER; j++)                   /* the knobs that were depths with breath: routes (core/routes.c) */
+        if (trk[j].p[P_ENGINE] != ENG_ID_OFF)
+            routes_preset(j);
+    for (j = 0; j < NELEM(FACTORY[k].f) && f[j].op != FP_END; j++)   /* then the preset's own routes, over them */
+        if (f[j].op == FP_CELL)
+            cell_set(f[j].l % NLAYER, f[j].i, (uint32_t)f[j].v >> 8 & 15u, (int8_t)(f[j].v & 0xFF));
 }
 
 /* the routes as a record or the state keep them (3 bytes each: layer << 6 | target, source, amount), and back */

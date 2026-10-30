@@ -1,6 +1,8 @@
 # Controls: sources, curves and the matrix (design, 2026-10-30)
 
-Status: stage 1 (the sources) and stage 2 (the routes, HOME's grid) built 2026-10-30; stage 3 (the engines' hidden links, PANFLUTE) next. Keep this file the reference.
+Status: stages 1 .. 3 built 2026-10-30 (the sources; the routes, HOME's grid; the engines' hidden links, PANFLUTE).
+Stage 4 (the effects' grid, new curves, CENTRE, an LFO source) not started. Keep this file the reference; what was
+built differently from the plan below, and each engine change with what to listen for: "As built", at the end.
 
 ## Why
 
@@ -209,3 +211,35 @@ There are no saved presets to keep (the user, 2026-10-30), so nothing is convert
    - a per-cell START;
    - an LFO as a source, which would retire every engine's own vibrato knobs (EVA VIB, RATE, TREM, VIB SWELL; ERS VIB,
      RATE, VIB SWELL; PANFLUTE RATE).
+
+## As built (2026-10-30)
+
+**Differences from the plan above:**
+
+- **LEVEL is a share, not an addition:** a route to LEVEL at +100 % makes the whole level the source's (as BR>AMP 127
+  did), at -100 % the level falls as the source rises; several multiply. Adding to the layer's LEVEL knob would have
+  made 0 (the layer off) the resting value.
+- **Cells:** 32 a preset, pooled across its layers, each in a fixed slot (the audio never sees one half written).
+- **PITCH** is not offered on a PANFLUTE layer (his pipes take no pitch: CHANGES.md W8).
+- **TONE's own breath** went too: TALK's DEPTH and SUB OCT's BREATH are routes (A -> VOWEL 63 %, A -> LEVEL 17 % with
+  LEVEL 48); SWEEP's accent rises with what its routes move its CUTOFF with (A by default: as before).
+- **Engine presets** (the tables in each engine, which the factory presets use) keep their knobs as they were made;
+  a layer taking one gets the depths that were with breath as A routes (core/routes.c routes_preset). The factory
+  presets' own routes (core/factory.h CEL) go on top.
+- **EVA's BREATH** (how much of EXCITE reaches its slots) stays a knob: it is EVA's own scale, like PANFLUTE's markers.
+
+**Every engine change, what to listen for:**
+
+| Engine | Before | Now | Listen for |
+|---|---|---|---|
+| layer | BR>AMP, BR>TONE (vmod.cutoff), BR>SHP | routes: LEVEL, the filter knob the engine had on vmod.cutoff (ANALOG CUT, ERS AMOUNT, TONE CUTOFF: 31 %), EXCITE | a filter swept by breath in coarser steps (a knob's 128, not 256 a knob step): zipper on slow swells |
+| FM, ERS | BR>LP +40 | A -> LP CUT 63 %; the BR>LP knob gone | the same |
+| EVA | VIB, TREM only above 55 % breath, deeper blown harder | VIB, TREM plain; A -> VIB (the preset's depth), the swell from each tongued note | **soft notes now have a little vibrato** (a linear A -> VIB: no onset) |
+| EVA | the vibrato 1.6 Hz faster at full breath | A -> RATE 32 % | the same |
+| EVA | SHAPE's drive half with the level | SHAPE half at rest, A -> SHAPE the other half (from A, not EVA's level slot) | the drive's breath response a little different at the bottom |
+| EVA | the waves' breath (BR PWM, HARMONIC, SYNC, SUPERSAW, TUNED) | WAVE MOD (EDIT 5), A -> WAVE MOD 100 % | the same |
+| ERS | VIB only above 55 % of a full tone's pressure | VIB plain, A -> VIB (the preset's) | **soft notes now have a little vibrato** (BANSURI VIB) |
+| PANFLUTE | breath from the CURVE before SMOOTH; BEND CC, VIB MODE, VIB CC, VIB DEPTH | EXCITE, LIP, WOBBLE, LFO DEPTH routes; TILT DEPTH (c/g), RATE, CENTRE | the same (the LFO measured equal, 2026-10-30) |
+
+**Still reading a source themselves** (stage 4): the effects' DRIVE (past DRV AT on A) and the status row's breath
+bar. CHIFF (EVA, ERS's JET) and ERS's physics follow EXCITE, as planned.

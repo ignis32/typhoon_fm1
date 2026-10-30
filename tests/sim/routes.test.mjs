@@ -21,8 +21,8 @@ export default function (t) {
   const flt = cell(0, C.SRC_A, C.T_TONE_A);
   ex.sim_par_set(LN(0, C.P_TONE), C.TN_TALK);
   const talk = cell(0, C.SRC_A, C.T_TONE_A);
-  check(init.join() === '100,0' && ers.join() === '100,100,31' && flt === 31 && talk === 0,
-    `routes: INIT BEND>PITCH ${init[0]}, no EXCITE (${init[1]}); ERS ${ers.join(' ')} (PITCH, EXCITE, AMOUNT); TONE FILTER A>CUTOFF ${flt}, TALK ${talk}`);
+  check(init.join() === '100,0' && ers.join() === '100,100,31' && flt === 31 && talk === 63,
+    `routes: INIT BEND>PITCH ${init[0]}, no EXCITE (${init[1]}); ERS ${ers.join(' ')} (PITCH, EXCITE, AMOUNT); TONE FILTER A>CUTOFF ${flt}, TALK A>VOWEL ${talk}`);
 
   // B -> PITCH 50 %: B (a CC of its own) bends by half the BEND range (4 st: +200 cents), BEND's tilt off
   fresh();
@@ -64,8 +64,9 @@ export default function (t) {
   fresh();
   let n = 0;
   for (let k = 0; k < 20; k++) for (const s of [C.SRC_B, C.SRC_C]) { ex.sim_par_set(CELL(1, s, C.T_KNOB + k), 10); n += cell(1, s, C.T_KNOB + k) === 10; }
-  const used = n;                                   // (INIT has 5: BEND > PITCH on its 3 layers, A > EXCITE on the 2 OFF)
-  check(used === 27, `routes: ${used} more fit beside INIT's 5, then no room (32 a preset)`);
+  const used = n;                                   // (INIT has 8: BEND > PITCH on its 3 layers, FM's A > LP CUT on them,
+                                                    // A > EXCITE on the 2 OFF)
+  check(used === 24, `routes: ${used} more fit beside INIT's 8, then no room (32 a preset)`);
 
   // saved with the preset, loaded back
   fresh();

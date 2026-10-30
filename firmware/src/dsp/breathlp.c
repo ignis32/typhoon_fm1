@@ -1,22 +1,23 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 /* Copyright (C) 2026 ignis32 */
-/* A breath low-pass for an engine's own output: closed to CUT at no breath, opened by breath x BR>LP, resonance RES;
- * dsp/dsp.c's trapezoidal SVF, as the mix's BREATH LP was (core/fx.c, until 2026-10-28: the same maths, on one layer
- * now). An engine takes it with three of its knobs (engine_t.blp: the first of CUT, RES, BR>LP), core/layers.c runs
- * it on the engine's block before TONE. Open (past ~84 % breath at the defaults): the sound passes as it is, the
- * filter running on at its top so it is in step when breath falls back; in or out, the block blends between them. */
+/* A breath low-pass for an engine's own output: at CUT, resonance RES, CUT moved by the layer's routes (A -> LP CUT
+ * 63 % by default: BR>LP +40's, a knob until 2026-10-30, core/routes.c); dsp/dsp.c's trapezoidal SVF, as the mix's
+ * BREATH LP was (core/fx.c, until 2026-10-28: the same maths, on one layer now). An engine takes it with three of its
+ * knobs (engine_t.blp: the first of CUT, RES, and one left unused), core/layers.c runs it on the engine's block before
+ * TONE. Open (CUT at its top: past ~84 % breath at the defaults): the sound passes as it is, the filter running on
+ * at its top so it is in step when breath falls back; in or out, the block blends between them. */
 typedef struct {
     int32_t s1, s2;
     uint8_t on;
 } blp_t;
 
-/* the defaults, the mix's BREATH LP's: CUT 60 (~580 Hz), RES 20, BR>LP +40 (open from ~84 % breath) */
+/* the defaults, the mix's BREATH LP's: CUT 60 (~580 Hz), RES 20 */
 #define BLP_KNOBS {"LP CUT", F_CUTOFF, 0, 127, 60, 0, 0, MOD}, {"LP RES", F_PCT, 0, 127, 20, 0, 0}, \
-                  {"BR>LP", F_BIPCT, -64, 63, 40, 0, 0}
+                  {"-", F_INT, 0, 0, 0, 0, 0}
 
-static void blp_block(blp_t *f, int32_t *x, int32_t cut0, int32_t res, int32_t br_lp, int32_t breath)   /* CTL frames */
+static void blp_block(blp_t *f, int32_t *x, int32_t cut0, int32_t res)   /* CTL frames */
 {
-    int32_t cut = (cut0 << 8) + ((breath * br_lp) >> 6), any = 0, on, y;
+    int32_t cut = cut0 << 8, any = 0, on, y;
     tsvf_t c;
     uint32_t i;
     for (i = 0; i < CTL; i++)

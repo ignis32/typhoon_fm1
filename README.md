@@ -42,6 +42,15 @@ The version is in `VERSION` (every build carries it: the header at power-on, Sys
   tilt. LFO is a sine at RATE whose depth is set by how far VIB CC is from CENTRE, for example the re.corder's
   rotation. Factory presets 28 PANFLUTE_TEC (his settings) and 29 PANFLUTE_ART (the re.corder). PERFORMANCE shows
   each core in its own column.
+- **Since 0.4:** the controls (`notes/05-controls.md`). Breath is just a controller: the sources BEND and A .. D are
+  set once in GLO → CONTROLS, each with its curve, SMOOTH and OVER (AO .. DO: a source's top end, for an overblow).
+  Each layer's ROUTES (HOME) send them to its targets, one to many: its level, pitch, pan, its engine's EXCITE (what
+  breath moved in it) and the knobs that may move while playing. No engine reads breath by itself any more:
+  BR>AMP, BR>TONE, BR>SHP, BR>LP, TONE TALK's DEPTH and SUB OCT's BREATH are routes now; EVA's and ERS's vibrato no
+  longer waits for 55 % breath (a route from A makes it deeper blown harder, one from B gives it to another
+  controller); EVA's waves follow a WAVE MOD knob. PANFLUTE's BEND CC, VIB MODE and VIB CC gave way to its route
+  targets LIP, WOBBLE and LFO DEPTH. Saved presets and settings from before are not read (the factory presets
+  sound as they did).
 - **Since 0.3:** the engines FM, ANALOG, ERS and EVA (SINE, NOISE, FOLD and VOWEL removed: FM at INDEX 0 is the
   sine, EVA has the noises, NS_*); 20 knobs an engine (EDIT 5), older presets read as they were. The mix's
   BREATH LP is ERS's and FM's own (EDIT 5). Every delay on breath is a knob, 0 (none) on a new layer: EVA LAG and

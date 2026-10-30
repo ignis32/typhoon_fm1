@@ -12,31 +12,34 @@
  *   faster up the keyboard; and the ones breath plays: SYNC, BR PWM, HARMONIC; SUB, SUPERSAW; the noises NS_WHITE,
  *   NS_PINK, NS_BROWN, NS_TUNED) + chiff -> filter (LP2, LP4, BP, HP: TPT SVF) -> waveshaper -> formant -> gain, tremolo
  *
- * Page 1:  BREATH  how much of the breath reaches the slots (BR_LVL: 80 = 0.8; what breath moves, + vmod.shape)
- *          WAVE    SAW, PULSE, SQUARE, TRI, SINE (as loud as a saw), MULTI, DBL;
- *                  SYNC     a saw hard-synced to the note, its own pitch 1 .. 4 x up with the breath: the lead's tear
- *                  BR PWM   a pulse, thin (8 %) blown softly .. square blown hard
- *                  HARMONIC additive: the harmonics come in one by one with the breath, 1 (a sine) .. 16 (a saw's)
+ * (2026-10-30: no source reaches EVA but through its layer's routes, core/routes.c: EXCITE the slots, A -> VIB, RATE,
+ * SHAPE, WAVE MOD by default; until then the vibrato, its rate, SHAPE's drive and the waves followed breath hidden)
+ * Page 1:  BREATH  how much of EXCITE reaches the slots (BR_LVL: 80 = 0.8; vmod.shape)
+ *          WAVE    SAW, PULSE, SQUARE, TRI, SINE (as loud as a saw), MULTI, DBL; and the waves WAVE MOD plays (A ->
+ *                  WAVE MOD 100 %: the breath, by default):
+ *                  SYNC     a saw hard-synced to the note, its own pitch 1 .. 4 x up with WAVE MOD: the lead's tear
+ *                  BR PWM   a pulse, thin (8 %) at WAVE MOD 0 .. square at full
+ *                  HARMONIC additive: the harmonics come in one by one with WAVE MOD, 1 (a sine) .. 16 (a saw's)
  *                  SUB      a saw and a square an octave below
- *                  SUPERSAW seven saws spread +-20 cents, wider blown harder
+ *                  SUPERSAW seven saws spread +-20 cents, wider with WAVE MOD
  *                  NS_WHITE, NS_PINK (-3 dB/oct), NS_BROWN (-6 dB/oct)  noise, each as loud as a saw: a layer of breath
  *                           noise, or with the layer's ENVELOPE (ATTACK 0, DECAY short, SUSTAIN 0) a puff on each tongued
  *                           note (NS_: the noises, waves and presets, told apart at a glance and listed together)
- *                  NS_TUNED noise through a resonator on the note: wide blown softly (a breath), narrow blown hard
+ *                  NS_TUNED noise through a resonator on the note: wide at WAVE MOD 0 (a breath), narrow at full
  *                           (almost a tone); the layer's TRANS +12 / +19 rings it on a harmonic (a flute's chiff)
  *          S.E.D.  loudness against brightness: high, the level comes up fast and the filter does the dynamics (a
  *                  low-pass gate); low, a plain VCA and a more open tone
  *          CUTOFF  the filter's floor, -3 .. +3 octaves (64: none)
  * Page 2:  RES     resonance
  *          SWEEP   a kick of the cutoff on each articulated note, decaying in 80 ms: -4 .. +4 octaves (64: none)
- *          VIB     vibrato depth (0 .. 60 cents): only above 55 % breath, deeper and faster blown harder, coming in
- *                  as fast as VIB SWELL says
- *          SHAPE   the waveshaper's drive, more of it with breath (0: off)
+ *          VIB     vibrato depth (0 .. 60 cents), in from each tongued note as fast as VIB SWELL says (A -> VIB:
+ *                  deeper blown harder; only above 55 % breath until 2026-10-30)
+ *          SHAPE   the waveshaper's drive (0: off; A -> SHAPE: more of it with breath)
  * Page 3:  FILTER  LP2, LP4, BP, HP
  *          VOWEL   the formant's vowel, A E I O U (in between: between them)
  *          FORMANT how much of the sound goes through the vowel's two formants (0: none)
  *          TREM    tremolo depth (0 .. 50 %), with the vibrato's onset and LFO, a quarter cycle on
- * Page 4:  RATE    the vibrato / tremolo LFO, 3 .. 8 Hz (64: 5.5)
+ * Page 4:  RATE    the vibrato / tremolo LFO, 3 .. 8 Hz (64: 5.5; A -> RATE: faster blown harder)
  *          KEYTRK  the cutoff's key tracking, 0 .. 1 octave an octave from C4 (38: 0.3)
  *          CHIFF   a burst of bright noise on each articulated note, 30 ms, as loud as the breath at once (0: none)
  *          LAG     how slowly the level, the filter and the waves breath plays follow the breath: 0 at once (the
@@ -44,6 +47,7 @@
  *                  twice as slow. RESPONSE until 2026-10-27, the other way round: LAG = 128 - RESPONSE
  * Page 5:  VIB SWELL how long the vibrato and tremolo take to come in: 0 at once; 64 400 ms (out in 150), as it was
  *                  fixed until 2026-10-27; 127 ~1.6 s
+ *          WAVE MOD what the waves above play with (2026-10-30; the breath, hidden, before)
  * (the humanise, 15 % fixed and hidden until 2026-10-28: gone; a fingering's own offsets are the layer's QUIRKS)
  * Everything else that shapes the sound: the block "EVA's fixed numbers" below, each with why.
  * Float (the AC79's single-precision FPU): its maths, oscillators, noises and filter are dsp/dspf.c's, shared. */
@@ -107,11 +111,10 @@ static const char *const EVA_N_WAVE[EVA_NWAVE] = {"SAW", "PULSE", "SQUARE", "TRI
 #define EVA_LP4_K0 1.6f                            /* LP4: less, 1.6 - 1.4 x RES (two stages ring more at the same RES) */
 #define EVA_LP4_K1 1.4f
 #define EVA_LP4_GAIN 1.3f                          /* LP4 makes up the second stage's loss */
-/* -- vibrato and tremolo (VIB, TREM, RATE, VIB SWELL are knobs) */
-#define EVA_VIB_ONSET 0.55f                        /* they come in above 55 % breath: a held soft note stays straight */
+/* -- vibrato and tremolo (VIB, TREM, RATE, VIB SWELL are knobs; with breath: their routes, A -> VIB, A -> RATE ... by
+ * default. Until 2026-10-30 hidden: in only above 55 % breath, deeper and 1.6 Hz faster blown harder) */
 #define EVA_VIB_HZ0 3.f                            /* RATE: 3 Hz .. */
 #define EVA_VIB_HZ_SPAN 5.f                        /* ... + 5 (8 Hz at 127; 5.5 at 64) */
-#define EVA_VIB_HZ_BR 1.6f                         /* + up to 1.6 Hz faster at full breath: a player's vibrato quickens */
 #define EVA_VIB_CENTS 60.f                         /* VIB 127: +-60 cents */
 #define EVA_TREM_DEPTH 0.5f                        /* TREM 127: the level -50 % at the dip */
 #define EVA_TREM_PHASE 0.25f                       /* the tremolo a quarter cycle on from the vibrato: louder as the
@@ -171,6 +174,8 @@ static void eva_note_on(track_t *t, voice_t *v)   /* an articulated note: the sw
     }
     s->sweep = 1.f;
     s->chiff = 1.f;
+    s->zv = 0.f;                                   /* the vibrato in again over VIB SWELL (until 2026-10-30: with the
+                                                    * breath's rise past 55 %) */
 }
 
 /* every block, sounding or not: a layer whose voice has faded out is at rest, all of it cleared (the followers, the
@@ -191,7 +196,7 @@ static void eva_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const v
     int32_t wave = clamp(p[P_E1], 0, EVA_NWAVE - 1);
     float br = (float)(m->shape - (64 << 8)) * (1.f / (63.f * 256.f));   /* the breath, 0 .. 1 (BR>SHP 63: all of it) */
     float sed = (float)p[P_E2] / 127.f, res = (float)p[P_E4] / 127.f, x, af, amp, oct, fc, g0, g1, b1, b2, b3;
-    float dt, vibc, w = EVA_PULSE_W, shp = (float)p[P_E7] / 127.f, wsd, note = (float)m->pitch16 / 16.f;
+    float dt, vibc, w = EVA_PULSE_W, shp = (float)p[P_E7] / 127.f, wsd, wm, note = (float)m->pitch16 / 16.f;
     int32_t filt = clamp(p[P_E8], 0, EVA_NFILT - 1);
     float fmt = (float)p[P_E10] / 127.f, vw, tr, tr0, tr1;
     float ch0, ch1, ck = (float)p[P_E14] * (EVA_CHIFF_LVL / 127.f) * dspf_sqrt(br), fk = EVA_FMT_K;
@@ -236,14 +241,14 @@ static void eva_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const v
         dspf_svf_coef(a[0] + (b[0] - a[0]) * vw, fk, &cv1);
         dspf_svf_coef(a[1] + (b[1] - a[1]) * vw, fk, &cv2);
     }
-    /* vibrato: above 55 % breath, deeper and faster blown harder; in over VIB SWELL (64: 400 ms, out in 150) */
-    x = dspf_clamp((br - EVA_VIB_ONSET) / (1.f - EVA_VIB_ONSET), 0.f, 1.f);
+    /* vibrato: VIB's depth, RATE's rate (their routes move them), in from each tongued note over VIB SWELL (64: 400 ms) */
+    x = 1.f;
     if (p[P_E16]) {
         float ms = EVA_SWELL_MS * (float)p[P_E16] * (float)p[P_E16] / 4096.f, t = x > s->zv ? ms : EVA_SWELL_OUT * ms;
         s->zv += (x - s->zv) / (1.f + t * ((float)FS / (float)CTL / 1000.f));   /* (a block's step: ~1 - e^(-1/(t f))) */
     } else
         s->zv = x;
-    s->vib += (EVA_VIB_HZ0 + EVA_VIB_HZ_SPAN * (float)p[P_E12] / 127.f + EVA_VIB_HZ_BR * s->zv) * (float)CTL / (float)FS;
+    s->vib += (EVA_VIB_HZ0 + EVA_VIB_HZ_SPAN * (float)p[P_E12] / 127.f) * (float)CTL / (float)FS;
     if (s->vib >= 1.f) s->vib -= 1.f;
     tr = s->vib + EVA_TREM_PHASE;                  /* the tremolo: a quarter cycle on (louder as the pitch rises) */
     if (tr >= 1.f) tr -= 1.f;
@@ -257,13 +262,16 @@ static void eva_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const v
         if (s->pwm >= 1.f) s->pwm -= 1.f;
         w = 0.5f + EVA_DBL_DEPTH * dspf_sin(s->pwm);
     }
-    wsd = shp * (0.5f + 0.5f * s->za) * EVA_SHP_DRIVE;   /* the drive, more with breath */
-    if (p[P_E15]) {                                /* the waves' breath: all of it, BREATH aside; after LAG as the filter
-                                                    * (LAG 64: 12 / 40 ms, as it was until 2026-10-27) */
+    wsd = shp * EVA_SHP_DRIVE;                     /* the drive (more with breath: its route; until 2026-10-30 half of it
+                                                    * hidden with the level) */
+    wm = (float)p[P_E17] / 127.f;                  /* WAVE MOD: what the wave plays (its routes: A -> WAVE MOD 100 % by
+                                                    * default; the breath itself, hidden, until 2026-10-30) */
+    if (p[P_E15]) {                                /* after LAG as the filter (LAG 64: 12 / 40 ms, as it was until
+                                                    * 2026-10-27) */
         float rsp = dspf_exp2((64.f - (float)p[P_E15]) / 32.f);
-        s->zw += dspf_clamp((br > s->zw ? EVA_F_ATK : EVA_F_REL) * rsp, 0.f, 1.f) * (br - s->zw);
+        s->zw += dspf_clamp((wm > s->zw ? EVA_F_ATK : EVA_F_REL) * rsp, 0.f, 1.f) * (wm - s->zw);
     } else
-        s->zw = br;
+        s->zw = wm;
     if (wave == EW_BPWM)
         w = EVA_BPWM_MIN + EVA_BPWM_SPAN * s->zw;
     if (wave == EW_HARM) {                         /* the harmonics with the breath, glided (no steps) */
@@ -353,7 +361,8 @@ static void eva_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const v
 
 /* (rsp: each preset's RESPONSE as it was made, kept for the record and read by nothing: every preset has LAG 0, the
  * breath at once, and VIB SWELL 64, the vibrato's 400 ms swell as it was; the user, 2026-10-28: a delay only as a
- * swell) */
+ * swell. VIB, TREM and SHP are as they were made, depths with breath: a layer taking a preset gets them as A routes,
+ * core/routes.c routes_preset) */
 #define EAP(n, b, w, sed, cut, res, swp, vib, shp, flt, vow, fmt, trm, rate, kt, chf, rsp) \
     {n, {b, w, sed, cut, res, swp, vib, shp, flt, vow, fmt, trm, rate, kt, chf, 0, 64}, {0, 0, 127, 25}, 0, 1, {0}, 0}
 static const preset_t EVA_PRESETS[] = {
@@ -390,7 +399,7 @@ static const preset_t EVA_PRESETS[] = {
 
 static const engine_t ENG_EVA = {
     .name = "EVA",
-    .page_title = {"EVA", "EVA +", "EVA COLOUR", "EVA PLAY", "EVA VIB"},
+    .page_title = {"EVA", "EVA +", "EVA COLOUR", "EVA PLAY", "EVA VIB WAVE"},
     .edit = {
         {"BREATH", F_PCT, 0, 127, 80, 0, 0},
         {"WAVE", F_ENUM, 0, EVA_NWAVE - 1, EW_SAW, EVA_N_WAVE, 0},
@@ -398,7 +407,8 @@ static const engine_t ENG_EVA = {
         {"CUTOFF", F_PCT, 0, 127, 64, 0, 0, MOD},
         {"RES", F_PCT, 0, 127, 19, 0, 0, MOD},
         {"SWEEP", F_PCT, 0, 127, 72, 0, 0},
-        {"VIB", F_PCT, 0, 127, 64, 0, 0, MOD},
+        {"VIB", F_PCT, 0, 127, 0, 0, 0, MOD},     /* (0: none at rest; A -> VIB 50 % by default, core/routes.c: its old
+                                                    * default 64, with breath) */
         {"SHAPE", F_PCT, 0, 127, 0, 0, 0, MOD},
         {"FILTER", F_ENUM, 0, EVA_NFILT - 1, EF_LP2, EVA_N_FILT, 0},
         {"VOWEL", F_PCT, 0, 127, 0, 0, 0, MOD},
@@ -409,6 +419,9 @@ static const engine_t ENG_EVA = {
         {"CHIFF", F_PCT, 0, 127, 0, 0, 0},
         {"LAG", F_PCT, 0, 127, 0, 0, 0},       /* (0 none; RESPONSE until 2026-10-27, the other way round) */
         {"VIB SWELL", F_PCT, 0, 127, 0, 0, 0}, /* (0 none; 64 = 400 ms, fixed until 2026-10-27: the presets have it) */
+        {"WAVE MOD", F_PCT, 0, 127, 0, 0, 0, MOD},   /* (2026-10-30) what each wave plays with: BR PWM's width, HARMONIC's
+                                                    * count, SYNC's ratio, SUPERSAW's spread, TUNED's width; A -> WAVE MOD
+                                                    * 100 % by default (the breath, hidden, before) */
     },
     .presets = EVA_PRESETS,
     .npresets = NELEM(EVA_PRESETS),

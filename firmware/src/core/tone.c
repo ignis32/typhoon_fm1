@@ -7,12 +7,12 @@
  * BR>TONE's until 2026-10-30).
  *   OFF      the engine as it is
  *   FILTER   a resonant filter: CUTOFF, RES, MODE (LP BP HP)
- *   SWEEP    a low-pass that opens by how fast breath rises, not how much (the EWI4000s's sweep): every attack bites
- *            bright and settles to CUTOFF; DEPTH, SPEED (how fast it settles)
- *   TALK     a talkbox: three vowel formants, the vowel moved by breath: VOWEL (where soft breath is, U O A E I),
- *            DEPTH (how far breath moves it), RES
- *   SUB OCT  an octave below (the Steiner EVI's / Akai EWI's sub voice) at the layer's loudness: LEVEL, BREATH (how
- *            much more of it breath brings: 0 always the same), WAVE (sine .. square)
+ *   SWEEP    a low-pass that opens by how fast what moves its CUTOFF rises (its routes: A by default), not how much
+ *            (the EWI4000s's sweep): every attack bites bright and settles to CUTOFF; DEPTH, SPEED (how fast it
+ *            settles)
+ *   TALK     a talkbox: three vowel formants: VOWEL (U O A E I; A -> VOWEL moves it, DEPTH's job until 2026-10-30), RES
+ *   SUB OCT  an octave below (the Steiner EVI's / Akai EWI's sub voice) at the layer's loudness: LEVEL (A -> LEVEL
+ *            brings more of it, BREATH's job until 2026-10-30), WAVE (sine .. square)
  * A type's knobs start at its defaults when the type is chosen (params.c par_set). State per layer, cleared when the
  * type changes. */
 
@@ -45,9 +45,10 @@ static const param_desc_t *tone_desc(int32_t type, uint32_t k)
                        {"MODE", F_ENUM, 0, 2, 0, N_TONE_MODE, 0}},
         [TN_SWEEP] = {{"CUTOFF", F_CUTOFF, 0, 127, 50, 0, 0, MOD}, {"DEPTH", F_PCT, 0, 127, 90, 0, 0},
                       {"SPEED", F_PCT, 0, 127, 60, 0, 0}},
-        [TN_TALK] = {{"VOWEL", F_PCT, 0, 127, 20, 0, 0, MOD}, {"DEPTH", F_BIPCT, -64, 63, 40, 0, 0},
+        [TN_TALK] = {{"VOWEL", F_PCT, 0, 127, 20, 0, 0, MOD}, {"-", F_INT, 0, 0, 0, 0, 0},
                      {"RES", F_PCT, 0, 127, 70, 0, 0, MOD}},
-        [TN_SUB] = {{"LEVEL", F_PCT, 0, 127, 70, 0, 0, MOD}, {"BREATH", F_PCT, 0, 127, 40, 0, 0},
+        [TN_SUB] = {{"LEVEL", F_PCT, 0, 127, 48, 0, 0, MOD}, {"-", F_INT, 0, 0, 0, 0, 0},   /* (LEVEL 70 x (1 - BREATH 40
+                                                    * + 40 x breath) until 2026-10-30: 48 here, 22 more by A) */
                     {"WAVE", F_PCT, 0, 127, 20, 0, 0, MOD}},
     };
     return &D[(uint32_t)clamp(type, 0, TN_COUNT - 1)][k % 3u];
@@ -64,7 +65,8 @@ static void tone_defaults(int16_t *p)              /* the knobs at their type's 
 static inline int32_t tone_k(int32_t res) { return 7200 - clamp(res, 0, 127) * 52; }   /* RES: damping 1.76 .. 0.13
                                                                                          * (Q12; FILTER's, TALK's) */
 
-/* layer l's block (buf, n samples, after its engine): through its TONE. breath Q15; m its modulation (inc, amp) */
+/* layer l's block (buf, n samples, after its engine): through its TONE. breath: what its routes move CUTOFF with, as
+ * one (core/routes.c route_t.tone_in, Q15: SWEEP's accent); m its modulation (inc, amp) */
 static void tone_block(uint32_t l, int32_t *buf, uint32_t n, const int16_t *p, const vmod_t *m, int32_t breath)
 {
     int32_t type = clamp(p[P_TONE], 0, TN_COUNT - 1), a = p[P_TONE_A], b = p[P_TONE_B], c = p[P_TONE_C], bp, lp;
@@ -98,8 +100,8 @@ static void tone_block(uint32_t l, int32_t *buf, uint32_t n, const int16_t *p, c
         }
         break;
     }
-    case TN_TALK: {                                /* the vowel: VOWEL + breath x DEPTH, U .. I */
-        int32_t pos = clamp((a << 8) + ((breath * b) >> 6), 0, 127 << 8), seg = pos * 4 / (127 << 8), frac;
+    case TN_TALK: {                                /* the vowel: VOWEL (moved by its routes), U .. I */
+        int32_t pos = clamp(a << 8, 0, 127 << 8), seg = pos * 4 / (127 << 8), frac;
         int32_t k = tone_k(c);
         if (seg > 3) seg = 3;
         frac = (pos - seg * (127 << 8) / 4) * 4;
@@ -116,7 +118,7 @@ static void tone_block(uint32_t l, int32_t *buf, uint32_t n, const int16_t *p, c
         break;
     }
     case TN_SUB: {                                 /* an octave below at the layer's loudness (m->amp1, Q15) */
-        int32_t lev = (a * ((127 - b) * 256 + ((b * breath) >> 7))) >> 7;   /* Q15-ish: LEVEL x (1 - B + B x breath) */
+        int32_t lev = (a * 127 * 256) >> 7;        /* Q15-ish: LEVEL (moved by its routes) */
         int32_t g = (int32_t)(mul64(lev, m->amp1) >> 15), w = c << 8;
         uint32_t inc = m->inc >> 1, ph = tone_st[l].sub;
         for (i = 0; i < n; i++) {

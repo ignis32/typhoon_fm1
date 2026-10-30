@@ -124,6 +124,8 @@ static void ers_note_on(track_t *t, voice_t *v)
 {
     ers_init(t, v);
     ers_st[(uint32_t)(t - trk) % NLAYER].tg = ERS_ONE;   /* TONGUE's kick */
+    ers_st[(uint32_t)(t - trk) % NLAYER].zv = 0;   /* the vibrato in again over VIB SWELL (on breath's rise past 55 %
+                                                    * until 2026-10-30: VIB is plain now, A -> VIB its breath) */
     if (t->p[P_E1] == EX_JET)
         ers_st[(uint32_t)(t - trk) % NLAYER].ch = 1764;   /* JET: a 40 ms chiff (a fresh note only: no legato) */
 }
@@ -148,9 +150,10 @@ static void ers_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const v
         pr = clamp(pr + ((((pr * p[P_E10]) >> 8) * st->tg) >> 14), 0, 127 << 8);
         st->tg = (st->tg * 16088) >> 14;
     }
-    if (p[P_E8]) {                                 /* VIB: in above 55 % of a full tone, over VIB SWELL (64: in 400 ms,
-                                                    * out 150; 0: at once) */
-        int32_t x = clamp((pr - 9011) * 16384 / 7373, 0, ERS_ONE), sw = p[P_E19];
+    if (p[P_E8]) {                                 /* VIB: its depth as the knob (and its routes) say, in over VIB SWELL
+                                                    * from each tongued note (64: in 400 ms; 0: at once). In only above
+                                                    * 55 % of a full tone's pressure until 2026-10-30 */
+        int32_t x = ERS_ONE, sw = p[P_E19];
         if (sw) {                                  /* (SWELL 64: 400 ms in, 150 out: 30 and 79, as it was fixed) */
             int32_t ms = 400 * sw * sw / 4096;
             st->zv += ((x - st->zv) * pole_q14(x > st->zv ? ms : ms * 3 / 8)) >> 14;   /* (dsp/dspx.c) */

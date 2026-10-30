@@ -18,6 +18,8 @@ export default function (t) {
     ex.sim_par_set(L1(C.P_ENGINE), eva);
     return ex.sim_engine_preset(0, k);
   };
+  // no vibrato in the way: VIB at rest 0 and its route from A (the preset's depth with breath) gone
+  const novib = () => { ex.sim_par_set(L1(C.P_E0 + 6), 0); ex.sim_par_set(t.CELL(0, C.SRC_A, C.T_KNOB + 6), 0); };
   let k = 0;
   for (; fresh(k); k++) {
     ex.sim_midi(0xB0, 2, 0); ex.sim_midi(0x90, 69, 80);
@@ -40,7 +42,7 @@ export default function (t) {
   // moment), not the slur
   const kickOf = (sweep) => {
     fresh(0);
-    ex.sim_par_set(L1(C.P_E0 + 6), 0);            // (no vibrato in the way)
+    novib();            // (no vibrato in the way)
     ex.sim_par_set(L1(C.P_E0 + 5), sweep);
     ex.sim_midi(0xB0, 2, 100); ex.sim_midi(0x90, 60, 80);
     run(25);
@@ -57,16 +59,22 @@ export default function (t) {
   const on = kickOf(100), off = kickOf(64);
   check(on.low > 0.05 && on.kick > off.kick * 1.15 && Math.abs(on.slur / off.slur - 1) < 0.05,
     `EVA: a slur keeps sounding (lowest ${on.low.toFixed(3)}); the sweep kicks a fresh note (${on.kick.toFixed(3)} vs ${off.kick.toFixed(3)} without), not the slur (${on.slur.toFixed(3)} vs ${off.slur.toFixed(3)})`);
-  // vibrato: none at 40 % breath, there at full
-  const wob = (b) => {
-    fresh(0); ex.sim_midi(0xB0, 2, b); ex.sim_midi(0x90, 69, 80); run(1500);
+  // vibrato (its onset at 55 % breath gone 2026-10-30): the preset's depth a route from A, deeper blown harder; moved
+  // to B, the vibrato is B's: none at full breath with B down, there at soft breath with B up
+  const wob = (b, set = () => {}, bv = 0) => {
+    fresh(0); set(); ex.sim_midi(0xB0, 20, bv); ex.sim_midi(0xB0, 2, b); ex.sim_midi(0x90, 69, 80); run(1500);
     const f = []; for (let i = 0; i < 12; i++) f.push(t.pitch(40, 380, 510));
     t.off(69, 800);
     return Math.max(...f) / Math.min(...f);
   };
   const w40 = wob(50), w100 = wob(127);
-  check(w40 < 1.004 && w100 > 1.008, `EVA: vibrato out below its onset (x${w40.toFixed(4)}), in at full breath (x${w100.toFixed(4)})`);
-  fresh(0); ex.sim_par_set(L1(C.P_E0 + 6), 0);
+  ex.sim_par_set(t.G(C.G_CC_B), 20);
+  const toB = () => { novib(); ex.sim_par_set(t.CELL(0, C.SRC_B, C.T_KNOB + 6), 100); };
+  const b0 = wob(127, toB, 0), b1 = wob(50, toB, 127);
+  ex.sim_par_set(t.G(C.G_CC_B), 52);
+  check(w100 > w40 * 1.002 && w100 > 1.008 && b0 < 1.004 && b1 > 1.008,
+    `EVA: vibrato with breath (A > VIB: x${w40.toFixed(4)} at 40 %, x${w100.toFixed(4)} full); on B: none with B down at full breath (x${b0.toFixed(4)}), there at soft breath with B up (x${b1.toFixed(4)})`);
+  fresh(0); novib();
   ex.sim_midi(0xB0, 2, 100); ex.sim_midi(0x90, 69, 80); run(500);
   const f = t.pitch(300, 400, 480);
   t.off(69, 800);
@@ -78,7 +86,7 @@ export default function (t) {
   // the new knobs each do something: a held note at 100, one knob moved from the init sound
   const E = (k) => L1(C.P_E0 + k);
   const take = (set, ms = 300, skip = 400) => {
-    fresh(0); ex.sim_par_set(E(6), 0); set();
+    fresh(0); novib(); set();
     ex.sim_midi(0xB0, 2, 100); ex.sim_midi(0x90, 57, 80); run(skip);
     const x = grab(ms); t.off(57, 1200); return x;
   };
@@ -97,7 +105,7 @@ export default function (t) {
   // LAG 64 (RESPONSE 64's, fixed until 2026-10-27): the level ~8 ms, the cutoff ~12 to come up
   // (A5: the level of each ms, the rms of the 4 periods from there; to 90 % of the level 60 .. 80 ms after the step)
   const step = (lag) => {
-    fresh(0); ex.sim_par_set(E(6), 0); ex.sim_par_set(E(5), 64); ex.sim_par_set(E(15), lag);
+    fresh(0); novib(); ex.sim_par_set(E(5), 64); ex.sim_par_set(E(15), lag);
     ex.sim_midi(0xB0, 2, 40); ex.sim_midi(0x90, 81, 80); run(300);
     ex.sim_midi(0xB0, 2, 120);
     const x = grab(90); t.off(81, 800);
@@ -123,7 +131,7 @@ export default function (t) {
   // the waves breath plays: SYNC, BR PWM, HARMONIC brighter blown harder (more than SAW gets from the filter alone,
   // the filter held open); SUB an octave down; SUPERSAW in tune
   const harm = (w, b) => {                        // the harmonics 1 .. 8 of A3 (Goertzel), the filter open far above
-    fresh(0); ex.sim_par_set(E(6), 0); ex.sim_par_set(E(1), w); ex.sim_par_set(E(3), 127);
+    fresh(0); novib(); ex.sim_par_set(E(1), w); ex.sim_par_set(E(3), 127);
     ex.sim_midi(0xB0, 2, b); ex.sim_midi(0x90, 57, 80); run(600);
     const x = grab(400); t.off(57, 1200);
     return [1, 2, 3, 4, 5, 6, 7, 8].map((k) => {
@@ -141,7 +149,7 @@ export default function (t) {
   const pw = (b) => { const h = harm(C.EW_BPWM, b); return h[1] / h[0]; };
   const p45 = pw(45), p127 = pw(127);
   check(p45 > 3 * p127, `EVA BR PWM: thin blown softly (2nd harmonic ${p45.toFixed(2)} of the 1st), square blown hard (${p127.toFixed(3)})`);
-  const pf = (w) => { fresh(0); ex.sim_par_set(E(6), 0); ex.sim_par_set(E(1), w); ex.sim_midi(0xB0, 2, 100); ex.sim_midi(0x90, 69, 80); run(500); const f = t.pitch(300, 150, 600); t.off(69, 800); return f; };
+  const pf = (w) => { fresh(0); novib(); ex.sim_par_set(E(1), w); ex.sim_midi(0xB0, 2, 100); ex.sim_midi(0x90, 69, 80); run(500); const f = t.pitch(300, 150, 600); t.off(69, 800); return f; };
   const fsub = pf(C.EW_SUB), fsup = pf(C.EW_SUPER);
   check(Math.abs(1200 * Math.log2(fsub / 220)) < 15 && Math.abs(1200 * Math.log2(fsup / 440)) < 15, `EVA SUB at A3 (${fsub.toFixed(1)} Hz), SUPERSAW at A4 (${fsup.toFixed(1)} Hz)`);
 
@@ -149,7 +157,7 @@ export default function (t) {
   // TUNED rings on the note blown hard, wider (brighter) blown softly
   const W_WHITE = C.EW_WHITE, W_PINK = C.EW_PINK, W_BROWN = C.EW_BROWN, W_TUNED = C.EW_TUNED;
   const play = (w, b, note = 57) => {
-    fresh(0); ex.sim_par_set(E(6), 0); ex.sim_par_set(E(1), w); ex.sim_par_set(E(3), 127); ex.sim_par_set(E(5), 64);
+    fresh(0); novib(); ex.sim_par_set(E(1), w); ex.sim_par_set(E(3), 127); ex.sim_par_set(E(5), 64);
     ex.sim_midi(0xB0, 2, b); ex.sim_midi(0x90, note, 80); run(500);
     const x = grab(300); t.off(note, 1200);
     return x;
@@ -188,7 +196,7 @@ export default function (t) {
   // by 1 .. 3 dB at 1/2, 1/4, 1/8 of the breath: EVA LEAD at CC 73 -> 74). EVA LEAD (SQUARE, S.E.D. 90), VIB 0; each
   // step's change against its neighbours' (a jump stands out of a smooth curve)
   fresh(2);
-  ex.sim_par_set(L1(C.P_E0 + 6), 0);
+  novib();
   ex.sim_midi(0xB0, 2, 30); ex.sim_midi(0x90, 74, 80); run(300);
   const sw = [];
   for (let b = 30; b <= 127; b++) { ex.sim_midi(0xB0, 2, b); run(40); sw.push(20 * Math.log10(rms(grab(60)))); }

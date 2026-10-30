@@ -207,15 +207,20 @@ static const char *const SRC_NAME[NSRC] = {"BEND", "A", "B", "C", "D", "AO", "BO
 static const char *const SRC_COL[NSRC] = {"PB", "A", "B", "C", "D", "AO", "BO", "CO", "DO"};
 static uint32_t grid_rows(uint32_t l, uint8_t *t)
 {
-    uint32_t n = 0, k;
+    uint32_t n = 0, k, idx;
     uint8_t miss;
     const param_desc_t *d;
     int on = trk[l].p[P_ENGINE] != ENG_ID_OFF;
+    idx = eng_index((uint32_t)trk[l].p[P_ENGINE], &miss);
     t[n++] = T_LEVEL;
-    t[n++] = T_PITCH;
+    if (!on || ENGINES[idx].pitch)                 /* (PANFLUTE's pipes take no pitch) */
+        t[n++] = T_PITCH;
     t[n++] = T_PAN;
-    if (on && ENGINES[eng_index((uint32_t)trk[l].p[P_ENGINE], &miss)].excite)
+    if (on && ENGINES[idx].excite)
         t[n++] = T_EXCITE;
+    for (k = 0; on && k < 3u; k++)                 /* the engine's own inputs (PANFLUTE's LIP, WOBBLE, LFO DEPTH) */
+        if (ENGINES[idx].e->in[k])
+            t[n++] = (uint8_t)(T_IN1 + k);
     for (k = 0; k < 3u; k++) {
         d = tone_desc(trk[l].p[P_TONE], k);
         if (d->mod && d->max > d->min)
@@ -247,6 +252,9 @@ static void grid_label(uint32_t l, uint32_t t, char *buf)   /* a row's name */
     if (t >= T_TONE_A && t <= T_TONE_C) {
         put_str(buf, "TONE ");
         put_str(buf + 5, tone_desc(trk[l].p[P_TONE], t - T_TONE_A)->label);
+    } else if (t >= T_IN1 && t <= T_IN3) {
+        const char *s = layer_engine(l)->in[t - T_IN1];
+        put_str(buf, s ? s : "-");
     } else if (t >= T_KNOB)
         put_str(buf, par_desc(LN(l, P_E0 + t - T_KNOB))->label);
     else

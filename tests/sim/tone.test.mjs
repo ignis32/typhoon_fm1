@@ -29,7 +29,8 @@ export default function (t) {
   const a = ex.sim_par_get(L1(C.P_TONE_A)), mode = ex.sim_par_get(L1(C.P_TONE_C));
   ex.sim_par_set(L1(C.P_TONE), C.TN_SUB);
   const lev = ex.sim_par_get(L1(C.P_TONE_A));
-  check(page === C.PG_TONE && a === 80 && mode === 0 && lev === 70, `TONE: EDIT's fourth page on FM (${page}), FILTER starts at CUTOFF 80 / LP, SUB OCT at LEVEL 70`);
+  check(page === C.PG_TONE && a === 80 && mode === 0 && lev === 48 && ex.sim_par_get(t.CELL(0, C.SRC_A, C.T_TONE_A)) === 17,
+    `TONE: EDIT's fourth page on FM (${page}), FILTER starts at CUTOFF 80 / LP, SUB OCT at LEVEL 48 and A > LEVEL 17 % (70 x (1 - 40 + 40 x breath) until 2026-10-30)`);
 
   // OFF leaves the engine as it is; FILTER LP darkens, HP takes the fundamental (most of a saw's level) away
   fresh(C.TN_OFF); const off = hold(); const ok0 = quiet();
