@@ -27,6 +27,7 @@ static uint32_t ms_since(uint32_t t)
 static struct {
     uint32_t page, drawn_dirty, drawn_page, drawn_layer, drawn_hdr, hdr, t_meter;
     int32_t drawn_breath, drawn_in;                /* (a curve page's dot as drawn) */
+    int32_t drawn_src[NSRC_CC];                    /* (CONTROLS: the sources' bars as drawn) */
     uint32_t touched_k, t_touched;                 /* the knob turned last, when (its value shows white) */
     uint8_t full;
     uint8_t src_sel;                               /* CONTROLS: the source turned last (0 .. 3: A .. D): EDIT opens its curve */
@@ -752,6 +753,12 @@ static void draw_knob_row(uint32_t k)
             span = (int32_t)NENGINES;
             d = &(const param_desc_t){"", F_INT, 0, 0, 0, 0, 0};
         }
+        if (ui.page == PG_CONTROLS) {              /* CONTROLS: the bar is the source's controller as it comes (the
+                                                    * number names it), before its curve */
+            v = (perf_ui.src_in[k % NSRC_CC] * 127) >> 15;
+            span = 127;
+            d = &(const param_desc_t){"", F_INT, 0, 127, 0, 0, 0};
+        }
         x = span ? (v - d->min) * 212 / span : 0;
         if (d->min < 0 && d->max > 0) {            /* bipolar: from the middle */
             int32_t z = (0 - d->min) * 212 / span;
@@ -1002,6 +1009,13 @@ static void ui_draw(void)
             draw_bt();
         if (pg->kind == UK_PERF && fm1_ms % 200u < 40u)   /* (~5 times a second) */
             draw_perf();
+        if (ui.page == PG_CONTROLS && !ui.t_splash && !ui_typing())   /* (the sources' bars, live: a row when its
+                                                    * value moved; not over the transpose's splash or a name) */
+            for (k = 0; k < NSRC_CC; k++)
+                if (perf_ui.src_in[k] != ui.drawn_src[k]) {
+                    ui.drawn_src[k] = perf_ui.src_in[k];
+                    draw_knob_row(k);
+                }
         if (pg->kind == UK_CURVE && (perf_ui.src_out[page_src()] != ui.drawn_breath ||
                                      perf_ui.src_in[page_src()] != ui.drawn_in)) {
             ui.drawn_breath = perf_ui.src_out[page_src()];
