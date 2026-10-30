@@ -85,11 +85,11 @@ knobs (markers, LAG, VIB SWELL, KEYTRK, the envelope) are not offered.
 ## Hidden links removed from the engines
 
 The rule: **an engine reads no source.** Where an engine follows breath today in a way that is a synth's shortcut,
-not its physics, the parameter becomes a plain target. Converted presets get the cell that keeps their sound. Each
+not its physics, the parameter becomes a plain target. The factory presets get the cell that keeps their sound. Each
 item is a change to an engine's code, done and listed one by one (as `engines/pan/denis/CHANGES.md` is), so a
 changed sound can be traced.
 
-| Engine | Hidden now | Becomes | Converted presets get |
+| Engine | Hidden now | Becomes | Factory presets get |
 |---|---|---|---|
 | EVA | VIB and TREM only above 55 % breath (EVA_VIB_ONSET), deeper blown harder | VIB, TREM plain depths | A→VIB, A→TREM |
 | EVA | the vibrato faster blown harder | RATE plain | A→RATE |
@@ -101,7 +101,7 @@ changed sound can be traced.
 | FX (later) | DRIVE past DRV AT | DRV AT goes | AO→DRIVE (A's OVER = the old DRV AT) |
 | PANFLUTE | BEND CC, VIB CC, VIB MODE, VIB DEPTH | the knobs go; LIP, WOBBLE, LFO DEPTH targets | B→LIP etc. by the preset |
 
-**What a converted preset loses:** a linear A→VIB cannot reproduce the 55 % onset, so soft notes get a little
+**What the factory presets lose:** a linear A→VIB cannot reproduce the 55 % onset, so soft notes get a little
 vibrato. Listen for it. If it is missed, the fix is a per-cell START (below), or AO→VIB where A's OVER sits near
 there.
 
@@ -154,8 +154,7 @@ HOME's breath page (BR>AMP, BR>TONE, BR>SHP) becomes the layer's grid:
 - **They fit in the record:** the 512-byte preset record already has a fourth layer row (4 x 48 values stored, 3 used):
   96 bytes = 32 cells, so the record's size and the flash layout do not change. PS_VER 5.
 - **Target numbers are stable per engine** (like ENG_ID_*): new targets are appended, never renumbered.
-- **GLO's sources** go in the global state (STATE_MAGIC bumped; the old BREATH CC, CURVE, SMOOTH and TILT>BEND values
-  are carried into A and BEND).
+- **GLO's sources** go in the global state (STATE_MAGIC bumped).
 
 ## Running it
 
@@ -170,26 +169,24 @@ HOME's breath page (BR>AMP, BR>TONE, BR>SHP) becomes the layer's grid:
   free. Nothing per sample.
 - **PANFLUTE (core 2)** takes its inputs at the audio block's start, as now.
 
-## Converting old presets (PS_VER 4 → 5, on load)
+## No conversion
 
-| Old | New |
-|---|---|
-| BR>AMP n | A→LEVEL |
-| BR>TONE n | A→TONE A (the TONE stage's cutoff) |
-| BR>SHP n, and the engine's breath input | A→EXCITE |
-| EVA, ERS: the hidden links (table above) | their cells |
-| ERS, FM BR>LP | A→LP CUT |
-| PANFLUTE BEND CC / VIB CC | cells from the matching source (the CC assigned to a source in GLO), or none |
-| the preset's own CURVE group | dropped (curves are global) |
+There are no saved presets to keep (the user, 2026-10-30), so nothing is converted:
 
-The factory presets (core/factory.h) are written in the new form directly.
+- **Old preset records are not read.** A record older than PS_VER 5 fails `ps_ok`, so its slot plays its factory
+  preset (or INIT), as a slot never saved does. The read paths for older records (versions 1 .. 4, PS_NP_V3) are
+  deleted.
+- **The global state starts from its defaults once** (a new STATE_MAGIC; the older ones' read paths deleted). The
+  defaults are the re.corder's: A = CC11 (breath), BEND = CC52 (rotation). Bluetooth and the other GLO settings are
+  set again by hand once.
+- **The factory presets (core/factory.h) are written in the new form directly.**
 
 ## Tests
 
 - **A MOD flag on a switch** (F_ENUM, F_ONOFF) fails the build's check.
 - **No engine source file reads breath, src_breath or cc_raw** (a grep in the sim tests).
-- **A converted preset of each engine sounds the same:** the level, the pitch and the spectrum over a breath swell, old
-  record against new, within a tolerance. The EVA vibrato onset is the known exception, tested on its own.
+- **Each factory preset sounds the same as before:** the level, the pitch and the spectrum over a breath swell, against
+  renders from the build before the change, within a tolerance. The EVA vibrato onset is the known exception, tested on its own.
 - **B→VIB:** vibrato with breath held soft, none with B at 0.
 - **AO:** zero below OVER, 127 at the top, A unchanged.
 - **The web editor** (web/editor, tsx.mjs tables) shows and edits the grid and the CONTROLS page.
@@ -202,7 +199,7 @@ The factory presets (core/factory.h) are written in the new form directly.
 3. **The engines:**
    - the hidden links out, one change at a time, each listed;
    - BR>AMP, BR>TONE, BR>SHP, BR>LP and PANFLUTE's routing knobs removed;
-   - old presets converted;
+   - the old record and state read paths deleted;
    - the factory presets rewritten;
    - the web editor.
 4. **Later:**
