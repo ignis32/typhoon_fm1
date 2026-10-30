@@ -5,9 +5,17 @@
 //   F0 7D 'T' 'R' 01 cmd seq <data: 8-bit bytes as 7-bit, LSB first> sum F7   (sum: 7D .. sum = 0 mod 128)
 export const VER = 1;
 export const CMD = { INFO: 0, LIST: 1, READ: 2, WBEGIN: 3, WDATA: 4, WCOMMIT: 5, DELETE: 6, RENAME: 7, STATS: 8,
-  LAYOUT: 9, DESCRIBE: 10, GET: 11, SET: 12, TEXT: 13, ENGINES: 14, GROUP: 15, LOAD: 16, SAVE: 17, STATE: 18 };
-// the editor's parameter handles (core/params.c) and 16-bit values
-export const H = { layer: (n, i) => (n << 8) | i, snd: (i) => 0x4000 | i, sndGlobal: (i) => 0xC000 | i, global: (i) => 0x8000 | i };
+  LAYOUT: 9, DESCRIBE: 10, GET: 11, SET: 12, TEXT: 13, ENGINES: 14, GROUP: 15, LOAD: 16, SAVE: 17, STATE: 18,
+  ROUTES: 19 };
+// the editor's parameter handles (core/params.c) and 16-bit values; a route's (CELL): source s -> layer n's target t
+export const H = { layer: (n, i) => (n << 8) | i, snd: (i) => 0x4000 | i, sndGlobal: (i) => 0xC000 | i, global: (i) => 0x8000 | i,
+  cell: (n, s, t) => 0x2000 | (n << 10) | (s << 6) | t };
+export const isCell = (h) => (h & 0xF000) === 0x2000;
+export const cellLayer = (h) => (h >> 10) & 3;
+// the sources (core/layers.h SRC_*), named as HOME's grid writes them out
+export const SOURCES = ['BEND', 'A', 'B', 'C', 'D', 'AO', 'BO', 'CO', 'DO'];
+// a route's amount: -100 .. +100 % (core/params.c's ROUTE descriptor, the same for every route: not asked for each)
+export const ROUTE_DESC = { fmt: 0, min: -100, max: 100, def: 0, names: 0, group: null, label: 'ROUTE', unit: '%', enum: null };
 export const s16 = (d, at) => { const v = d[at] | (d[at + 1] << 8); return v & 0x8000 ? v - 0x10000 : v; };
 export const i16 = (v) => [v & 255, (v >> 8) & 255];
 // a DESCRIBE reply's data -> {fmt, min, max, def, names, group, label, unit}
@@ -88,6 +96,12 @@ export const parseList = (d, first) => Array.from({ length: d.length / 13 }, (_,
   ({ slot: first + k, user: !!d[k * 13], name: nameOf(d.slice(k * 13 + 1, k * 13 + 13)) }));
 export const parseEngines = (d) => ({ count: d[0], list: Array.from({ length: (d.length - 1) / 9 }, (_, k) =>
   ({ id: d[1 + k * 9], name: nameOf(d.slice(2 + k * 9, 10 + k * 9)) })) });
+// ROUTES: {rows (how many), cols: [source], list: [{t (target), label}] (from the first asked, <= 4)}
+export const parseRoutes = (d) => {
+  const nc = d[1], at = 2 + nc;
+  return { rows: d[0], cols: Array.from(d.slice(2, at)), list: Array.from({ length: (d.length - at) / 13 }, (_, k) =>
+    ({ t: d[at + k * 13], label: nameOf(d.slice(at + k * 13 + 1, at + k * 13 + 13)) })) };
+};
 
 // a slot's record (core/presets.c ps_rec_t): CRC-32 of bytes 8.. at 4..7, the name at 16..27
 export const recordGood = (rec) => rec.length === SLOT_BYTES &&

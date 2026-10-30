@@ -116,6 +116,7 @@ export class Editor {
     this.wantText = new Map();    // handle -> value whose text is wanted (the latest only)
     this.pending = new Map();     // handle -> value to SET (the latest only)
     this.redescribe = new Set();  // layers whose engine knobs to describe again
+    this.routes = [];             // each layer's grid (ROUTES): {rows: [{t, label}], cols: [source]}
     this.lastSet = 0;
     this.settled = [];
     this.lastEngine = [];
@@ -139,16 +140,21 @@ export class Editor {
   soundHandles() { return Array.from({ length: this.layout.s }, (_, i) => H.snd(i)); }
   globalSoundHandles() { return Array.from({ length: this.layout.s }, (_, i) => H.sndGlobal(i)); }
   globalHandles() { return Array.from({ length: this.layout.g }, (_, i) => H.global(i)); }
+  // a layer's routes: every cell of its grid (a row's target from a column's source)
+  routeHandles(n) {
+    const r = this.routes[n];
+    return r ? r.rows.flatMap((row) => r.cols.map((s) => H.cell(n, s, row.t))) : [];
+  }
   allHandles() {
     const hs = [];
-    for (let n = 0; n < this.layout.layers; n++) hs.push(...this.layerHandles(n));
+    for (let n = 0; n < this.layout.layers; n++) hs.push(...this.layerHandles(n), ...this.routeHandles(n));
     return hs.concat(this.soundHandles(), this.globalSoundHandles(), this.globalHandles());
   }
   groupHandles(g) { return this.soundHandles().filter((h) => this.desc.get(h)?.group === g); }
-  isEngine(h) { return h < 0x4000 && (h & 0xFF) === TSX.P_ENGINE; }
-  layerOf(h) { return h < 0x4000 ? h >> 8 : -1; }
-  // the descriptor of a handle (a sound's global copy is the same parameter as the preset's)
-  d(h) { return this.desc.get(h & 0x4000 ? (h & ~0x8000) : h); }
+  isEngine(h) { return h < 0x2000 && (h & 0xFF) === TSX.P_ENGINE; }
+  layerOf(h) { return TSX.isCell(h) ? TSX.cellLayer(h) : h < 0x2000 ? h >> 8 : -1; }
+  // the descriptor of a handle (a sound's global copy is the same parameter as the preset's; a route's, the same for all)
+  d(h) { return TSX.isCell(h) ? TSX.ROUTE_DESC : this.desc.get(h & 0x4000 ? (h & ~0x8000) : h); }
   engineName(id) { return id === TSX.ENG_OFF ? 'OFF' : this.engines.find((e) => e.id === id)?.name ?? `#${id}`; }
 
   // ---------------------------------------------------------------- connect ---
@@ -174,6 +180,7 @@ export class Editor {
     hs.push(...this.soundHandles(), ...this.globalHandles());
     for (const h of hs) await this.#describe(h);
     this.lastEngine = [];
+    for (let n = 0; n < this.layout.layers; n++) await this.#readRoutes(n, P_USER);
     await this.refresh(P_USER);
     await this.listAll();
     await this.readState();
@@ -196,6 +203,31 @@ export class Editor {
     }
     this.desc.set(h, d);
     return changed;
+  }
+
+  // layer n's grid (ROUTES, 4 rows a request) -> true when it is not as it was
+  async #readRoutes(n, prio = P_USER) {
+    const rows = [];
+    let cols = [], total = 1;
+    while (rows.length < total) {
+      const r = TSX.parseRoutes(await this.link.ok(CMD.ROUTES, [n, rows.length], prio, 'ROUTES'));
+      total = r.rows;
+      cols = r.cols;
+      if (!r.list.length) break;
+      rows.push(...r.list);
+    }
+    const next = { rows, cols }, old = this.routes[n];
+    this.routes[n] = next;
+    return !old || JSON.stringify(old) !== JSON.stringify(next);
+  }
+  // every layer's grid read again (an engine, a TONE, a source assigned or a route changed): its values too, 'routes'
+  async #rereadRoutes(prio) {
+    for (let n = 0; n < this.layout.layers; n++) {
+      if (!(await this.#readRoutes(n, prio))) continue;
+      const hs = this.routeHandles(n), vs = await this.getMany(hs, prio);
+      hs.forEach((h, k) => { if (!this.pending.has(h)) this.val.set(h, vs[k]); });
+      this.emit('routes', n);
+    }
   }
 
   #forget(h) {                                     // h's cached texts (its meaning changed)
@@ -228,10 +260,13 @@ export class Editor {
     for (const h of changed) if (this.#engineSide(h)) this.redescribe.add(this.layerOf(h));
     if (changed.length) this.emit('values', changed);
     await this.#redescribe(prio);
+    if (changed.some((h) => this.#gridSide(h))) await this.#rereadRoutes(prio);
     return changed;
   }
 
-  #engineSide(h) { return this.layerOf(h) >= 0 && (this.isEngine(h) || (h & 0xFF) >= this.layout.e0 || this.#toneSide(h)); }
+  #engineSide(h) { return !TSX.isCell(h) && this.layerOf(h) >= 0 && (this.isEngine(h) || (h & 0xFF) >= this.layout.e0 || this.#toneSide(h)); }
+  // what the grids follow: a layer's engine and TONE, the globals (the sources assigned), the routes
+  #gridSide(h) { return TSX.isCell(h) || (h & 0xC000) === 0x8000 || this.isEngine(h) || (this.layerOf(h) >= 0 && this.#toneSide(h)); }
 
   value(h) { return this.pending.has(h) ? this.pending.get(h) : this.val.get(h); }
 
@@ -272,6 +307,7 @@ export class Editor {
             if (this.val.get(h) !== now) { this.val.set(h, now); back.push(h); }
           }
           if (this.#engineSide(h)) this.redescribe.add(this.layerOf(h));
+          if (this.#gridSide(h)) this.regrid = true;
         });
         if (back.length) this.emit('values', back);
       }
@@ -281,11 +317,18 @@ export class Editor {
       this.pumping = false;
       for (const r of this.settled.splice(0)) r();
     }
-    if (this.redescribe.size) {                    // once the knob rests a moment
+    if (this.redescribe.size || this.regrid) {     // once the knob rests a moment
       clearTimeout(this.redTimer);
       this.redTimer = setTimeout(() => {
-        if (!this.pumping && !this.pending.size) this.#redescribe(P_DESC).catch((e) => this.#fail(e));
+        if (!this.pumping && !this.pending.size) this.#afterSets(P_DESC).catch((e) => this.#fail(e));
       }, 120);
+    }
+  }
+  async #afterSets(prio) {                         // the layers described again, the grids read again
+    await this.#redescribe(prio);
+    if (this.regrid) {
+      this.regrid = false;
+      await this.#rereadRoutes(prio);
     }
   }
 
@@ -293,7 +336,7 @@ export class Editor {
   async flush() {
     while (this.pending.size || this.pumping) await new Promise((r) => { this.settled.push(r); this.#pump(); });
     clearTimeout(this.redTimer);
-    await this.#redescribe(P_USER);
+    await this.#afterSets(P_USER);
   }
 
   // a layer's engine knobs described again (their labels and ranges follow the engine, ERS's follow its other knobs);
@@ -403,6 +446,9 @@ export class Editor {
     this.set(H.layer(b, TSX.P_ENGINE), this.val.get(H.layer(a, TSX.P_ENGINE)));
     await this.flush();
     for (let i = 0; i < this.layout.p; i++) if (i !== TSX.P_ENGINE) this.set(H.layer(b, i), this.val.get(H.layer(a, i)));
+    await this.flush();
+    for (const h of this.routeHandles(a))         // (its routes: b's grid is a's now, the same engine and TONE)
+      this.set(H.cell(b, (h >> 6) & 15, h & 63), this.val.get(h) ?? 0);
     await this.flush();
     await this.refresh(P_USER);
   }

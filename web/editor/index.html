@@ -83,6 +83,13 @@
 
   /* a control: label | slider | value */
   .ctl { display: grid; grid-template-columns: 84px minmax(60px, 1fr) 76px; gap: 8px; align-items: center; min-height: 28px; }
+  /* a layer's routes (HOME's grid): targets down, sources across, an amount each (-100 .. 100 %, empty: none) */
+  table.routes { border-collapse: collapse; font-size: 12px; width: 100%; }
+  table.routes th { font-weight: 600; color: var(--dim); padding: 2px 3px; text-align: center; }
+  table.routes th.row { text-align: left; white-space: nowrap; }
+  table.routes td { padding: 1px 2px; text-align: center; }
+  table.routes input { width: 4.2em; padding: 1px 3px; text-align: right; }
+  table.routes input.on { border-color: var(--amber); font-weight: 700; }
   .ctl > .lab { font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .ctl.blank > .lab { color: var(--dim); font-weight: 400; }
   .ctl .val { font-size: 12.5px; text-align: right; font-variant-numeric: tabular-nums; cursor: text; white-space: nowrap;

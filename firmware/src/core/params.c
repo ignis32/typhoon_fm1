@@ -29,7 +29,7 @@ typedef uint16_t pref_t;
 #define PR_NONE ((pref_t)0xFFFFu)
 static int pr_layer(pref_t r) { return r != PR_NONE && !(r & (PR_GLOBAL | PR_SND | PR_CELL)); }
 static int pr_snd(pref_t r) { return r != PR_NONE && (r & PR_SND); }   /* SP or SG */
-static int pr_cell(pref_t r) { return r != PR_NONE && (r & (PR_GLOBAL | PR_SND | PR_CELL)) == PR_CELL; }
+static int pr_cell(pref_t r) { return r != PR_NONE && (r & 0xF000u) == PR_CELL; }   /* (bit 12: none) */
 
 static const char *const N_FTYPE[] = {"LP", "BP", "HP"};
 static const char *const N_BSRC[] = {"AUTO", "CC", "VEL"};   /* (A: its controller, else velocity; the controller only;
@@ -119,27 +119,27 @@ static const param_desc_t GLOBAL[G_COUNT] = {
     [G_CC_B] = {"B", F_INT, 0, 128, 52, 0, 0},           /* (the re.corder's rotation, as BEND's tilt) */
     [G_CC_C] = {"C", F_INT, 0, 128, 0, 0, 0},
     [G_CC_D] = {"D", F_INT, 0, 128, 0, 0, 0},
-    [G_LO_A] = {"LOW", F_INT, -64, 126, 0, 0, 0},        /* (below 0: a head start: a held note sounds before any breath) */
-    [G_LO_B] = {"LOW", F_INT, -64, 126, 0, 0, 0},
-    [G_LO_C] = {"LOW", F_INT, -64, 126, 0, 0, 0},
-    [G_LO_D] = {"LOW", F_INT, -64, 126, 0, 0, 0},
-    [G_HI_A] = {"HIGH", F_INT, 1, 127, 120, 0, 0},       /* (the breath curve's, as it was) */
-    [G_HI_B] = {"HIGH", F_INT, 1, 127, 127, 0, 0},
-    [G_HI_C] = {"HIGH", F_INT, 1, 127, 127, 0, 0},
-    [G_HI_D] = {"HIGH", F_INT, 1, 127, 127, 0, 0},
-    [G_SHP_A] = {"SHAPE", F_INT, -64, 63, 0, 0, 0},
-    [G_SHP_B] = {"SHAPE", F_INT, -64, 63, 0, 0, 0},
-    [G_SHP_C] = {"SHAPE", F_INT, -64, 63, 0, 0, 0},
-    [G_SHP_D] = {"SHAPE", F_INT, -64, 63, 0, 0, 0},
-    [G_OVER_A] = {"OVER", F_INT, 0, 126, 0, 0, 0},
-    [G_OVER_B] = {"OVER", F_INT, 0, 126, 0, 0, 0},
-    [G_OVER_C] = {"OVER", F_INT, 0, 126, 0, 0, 0},
-    [G_OVER_D] = {"OVER", F_INT, 0, 126, 0, 0, 0},
-    [G_SMOOTH_A] = {"SMOOTH", F_INT, 0, 100, 0, 0, "ms"},   /* (0: none; breath's was 5 until 2026-10-24, 20 until
+    [G_LO_A] = {"A LOW", F_INT, -64, 126, 0, 0, 0},        /* (below 0: a head start: a held note sounds before any breath) */
+    [G_LO_B] = {"B LOW", F_INT, -64, 126, 0, 0, 0},
+    [G_LO_C] = {"C LOW", F_INT, -64, 126, 0, 0, 0},
+    [G_LO_D] = {"D LOW", F_INT, -64, 126, 0, 0, 0},
+    [G_HI_A] = {"A HIGH", F_INT, 1, 127, 120, 0, 0},       /* (the breath curve's, as it was) */
+    [G_HI_B] = {"B HIGH", F_INT, 1, 127, 127, 0, 0},
+    [G_HI_C] = {"C HIGH", F_INT, 1, 127, 127, 0, 0},
+    [G_HI_D] = {"D HIGH", F_INT, 1, 127, 127, 0, 0},
+    [G_SHP_A] = {"A SHAPE", F_INT, -64, 63, 0, 0, 0},
+    [G_SHP_B] = {"B SHAPE", F_INT, -64, 63, 0, 0, 0},
+    [G_SHP_C] = {"C SHAPE", F_INT, -64, 63, 0, 0, 0},
+    [G_SHP_D] = {"D SHAPE", F_INT, -64, 63, 0, 0, 0},
+    [G_OVER_A] = {"A OVER", F_INT, 0, 126, 0, 0, 0},
+    [G_OVER_B] = {"B OVER", F_INT, 0, 126, 0, 0, 0},
+    [G_OVER_C] = {"C OVER", F_INT, 0, 126, 0, 0, 0},
+    [G_OVER_D] = {"D OVER", F_INT, 0, 126, 0, 0, 0},
+    [G_SMOOTH_A] = {"A SMOOTH", F_INT, 0, 100, 0, 0, "ms"},   /* (0: none; breath's was 5 until 2026-10-24, 20 until
                                                              * 2026-10-23: ~46 ms to 90 %, felt as lag) */
-    [G_SMOOTH_B] = {"SMOOTH", F_INT, 0, 100, 0, 0, "ms"},
-    [G_SMOOTH_C] = {"SMOOTH", F_INT, 0, 100, 0, 0, "ms"},
-    [G_SMOOTH_D] = {"SMOOTH", F_INT, 0, 100, 0, 0, "ms"},
+    [G_SMOOTH_B] = {"B SMOOTH", F_INT, 0, 100, 0, 0, "ms"},
+    [G_SMOOTH_C] = {"C SMOOTH", F_INT, 0, 100, 0, 0, "ms"},
+    [G_SMOOTH_D] = {"D SMOOTH", F_INT, 0, 100, 0, 0, "ms"},
 };
 
 static uint32_t par_dirty;                         /* bumped by every change: the UI redraws, storage saves */

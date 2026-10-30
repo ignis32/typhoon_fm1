@@ -70,6 +70,27 @@ export default async function (t) {
     'webeditor DESCRIBE: REVERB TYPE\'s names by TEXT, the engines by ENGINES (and OFF), a global copy as its preset\'s');
   check(ed.list.every((s, k) => s.name === t.name(k) && s.user === !!ex.sim_preset_user(k)), 'webeditor LIST: the 96 slots, names and user flags');
 
+  // the routes (ROUTES, CELL handles): each layer's grid as HOME has it; a route set here is the device's; another
+  // engine, another grid
+  check(TSX.SOURCES.length === C.NSRC && TSX.SOURCES.every((n, s) => C[`SRC_${n}`] === s) &&
+    TSX.H.cell(1, C.SRC_B, C.T_KNOB + 3) === t.CELL(1, C.SRC_B, C.T_KNOB + 3), 'webeditor: the sources\' names and a route\'s handle: tsx.mjs = the C');
+  const g0 = ed.routes[0];
+  check(g0 && g0.rows.length >= 4 && g0.rows[0].label === 'LEVEL' && g0.cols[0] === C.SRC_BEND &&
+    ed.routeHandles(0).every((h) => ed.val.get(h) === dev(h)),
+    `webeditor ROUTES: layer 1 ${g0?.rows.length} targets (${g0?.rows.map((r) => r.label).join(' ')}) x ${g0?.cols.map((s) => TSX.SOURCES[s]).join(' ')}, every amount the device's`);
+  ed.set(TSX.H.cell(0, C.SRC_B, C.T_PAN), -35);
+  await ed.flush();
+  const cellDev = dev(t.CELL(0, C.SRC_B, C.T_PAN));
+  ed.set(TSX.H.cell(0, C.SRC_B, C.T_PAN), 0);
+  await ed.flush();
+  const before = ed.routes[1].rows.length;
+  ed.set(LN(1, C.P_ENGINE), C.ENG_ID_EVA);
+  await ed.flush();
+  const evaRows = ed.routes[1].rows.map((r) => r.label);
+  check(cellDev === -35 && evaRows.includes('WAVE MOD') && evaRows.length !== before,
+    `webeditor ROUTES: B > PAN set here: ${cellDev} on the device; layer 2 on EVA: its grid again (${evaRows.length} targets, WAVE MOD among them)`);
+  ex.sim_preset(1); await ed.refresh();
+
   // SET as a knob: the latest value only, a few SETs for many moves, clamped
   let f = port.frames;
   for (let v = 0; v <= 127; v++) ed.set(LN(0, C.P_LEVEL), v);

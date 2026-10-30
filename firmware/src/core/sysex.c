@@ -52,6 +52,11 @@
  *   18 STATE           -                              a counter that moves with every change (4 B), the slot that
  *                                                     plays, edited, the owned groups, the UI's layer, the page: the
  *                                                     editor polls it and reads again when it moved
+ *   19 ROUTES          layer, first row               a layer's routes as HOME's grid shows them (2026-10-30): its
+ *                                                     rows, its columns, the columns' sources (SRC_*, 1 B each), then
+ *                                                     from the first row on (<= 4) each row's target (T_*, 1 B) and
+ *                                                     name (12 B). A route's amount is a handle (core/params.c CELL:
+ *                                                     0x2000 | layer << 10 | source << 6 | target), GET / SET as any
  *
  * Writes (COMMIT, DELETE, RENAME) wait for silence, as the settings do (a flash erase stalls the sound): TS_BUSY
  * while something sounds, and the computer asks again. A write of the slot that plays, not edited, loads it.
@@ -63,7 +68,8 @@
  * calls, and the highest since STATS read it */
 static volatile uint32_t audio_load, audio_peak;
 enum { TSX_INFO, TSX_LIST, TSX_READ, TSX_WBEGIN, TSX_WDATA, TSX_WCOMMIT, TSX_DELETE, TSX_RENAME, TSX_STATS,
-       TSX_LAYOUT, TSX_DESCRIBE, TSX_GET, TSX_SET, TSX_TEXT, TSX_ENGINES, TSX_GROUP, TSX_LOAD, TSX_SAVE, TSX_STATE };
+       TSX_LAYOUT, TSX_DESCRIBE, TSX_GET, TSX_SET, TSX_TEXT, TSX_ENGINES, TSX_GROUP, TSX_LOAD, TSX_SAVE, TSX_STATE,
+       TSX_ROUTES };
 enum { TS_OK, TS_EMPTY, TS_BUSY, TS_BAD, TS_FAIL, TS_CRC };
 
 static struct {
@@ -122,6 +128,8 @@ static void wrname(uint8_t *p, const char *s, uint32_t n)   /* s into n bytes, 0
 static int tsx_par_ok(pref_t r)
 {
     uint32_t i = r & 0xFFu;
+    if (pr_cell(r))                                /* a route: an explicit layer (not CELL_SEL) */
+        return ((r >> 10) & 3u) < NLAYER && cell_src(r) < NSRC && cell_tgt(r) < NTARGET;
     if (r & PR_SND) return i < S_COUNT && !(r & 0x3F00u);
     if (r & PR_GLOBAL) return i < G_COUNT && !(r & 0x3F00u);
     return ((r >> 8) & 0x0Fu) < NLAYER && i < P_COUNT && !(r & 0x3000u);   /* (an explicit layer, not PR_SEL) */
@@ -351,6 +359,27 @@ static int tsx_command(uint32_t cmd, const uint8_t *d, uint32_t n, uint8_t *o, u
         o[4] = ps.cur; o[5] = ps_edited; o[6] = s_own; o[7] = (uint8_t)gpar[G_LAYER]; o[8] = (uint8_t)ui.page;
         *on = 9;
         return TS_OK;
+    case TSX_ROUTES: {                             /* a layer's grid, as HOME shows it (ui.c grid_rows, grid_cols) */
+        uint8_t rows[NTARGET], cols[NSRC];
+        uint32_t nr, nc;
+        if (n != 2u || d[0] >= NLAYER) return TS_BAD;
+        nr = grid_rows(d[0], rows);
+        nc = grid_cols(d[0], cols);
+        o[0] = (uint8_t)nr;
+        o[1] = (uint8_t)nc;
+        for (i = 0; i < nc; i++)
+            o[2 + i] = cols[i];
+        k = 2u + nc;
+        for (i = d[1]; i < nr && i < d[1] + 4u; i++) {
+            char s[24];
+            o[k++] = rows[i];
+            grid_label(d[0], rows[i], s);
+            wrname(o + k, s, 12);
+            k += 12u;
+        }
+        *on = k;
+        return TS_OK;
+    }
     }
     return TS_BAD;
 }

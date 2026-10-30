@@ -29,12 +29,11 @@ if (SIM) {
 
 // where a layer's common parameters go (the device's LAYER, BREATH, ENVELOPE pages), by label; others: MORE
 const LAYER_PAGES = [
-  ['LAYER', ['LEVEL', 'MUTE', 'TRANSP', 'FINE', 'PAN']],
-  ['BREATH', ['BR>TONE', 'BR>SHP', 'F.TYPE']],
-  ['ENVELOPE', ['DELAY', 'ATTACK', 'DECAY', 'SUSTAIN', 'RELEASE', 'BR>AMP']],
+  ['LAYER', ['LEVEL', 'MUTE', 'TRANSP', 'FINE', 'PAN', 'F.TYPE']],   // (BR>TONE, BR>SHP, BR>AMP until 2026-10-30:
+  ['ENVELOPE', ['DELAY', 'ATTACK', 'DECAY', 'SUSTAIN', 'RELEASE']],  // the layer's ROUTES now)
 ];
 // the sound groups in the order the FX button goes through them (by name; a new one at the end)
-const GROUP_ORDER = ['CURVE', 'BREATH LP', 'DRIVE', 'DETUNE', 'DELAY', 'REVERB', 'VOLUME'];
+const GROUP_ORDER = ['DRIVE', 'DETUNE', 'DELAY', 'REVERB', 'VOLUME'];
 
 let midi = null, link = null, ed = null, port = null;
 const ctls = new Map();          // handle -> Set of controls showing it
@@ -95,6 +94,7 @@ async function connect() {
   ed.on('values', (hs) => hs.forEach(update))
     .on('text', (h, v) => { for (const c of ctls.get(h) ?? []) c.text(v); })
     .on('layer', (n) => buildLayer(n))
+    .on('routes', (n) => buildLayer(n))
     .on('state', showState)
     .on('list', showList)
     .on('busy', (b) => $('busy').classList.toggle('on', b))
@@ -231,7 +231,7 @@ window.addEventListener('pointerup', () => {
   setTimeout(() => update(h), 600);
 });
 function forgetCtls(root) {             // controls inside root are gone
-  for (const b of root.querySelectorAll('.ctl')) if (b.ctl) ctls.get(b.handle)?.delete(b.ctl);
+  for (const b of root.querySelectorAll('.ctl, table.routes input')) if (b.ctl) ctls.get(b.handle)?.delete(b.ctl);
   if (root.engCtl) ctls.get(root.engCtl.h)?.delete(root.engCtl);
 }
 
@@ -293,12 +293,51 @@ function buildLayer(n) {
   const knobs = ed.knobHandles(n).filter((h, i, a) => i < 8 || a.slice(i - (i % 4), i - (i % 4) + 4).some(live));
   body.append(el('h3', {}, `${name} KNOBS`), ...knobs.map(control));
   if (tone.length) body.append(el('h3', {}, 'TONE'), ...tone.filter((h) => h === th || (ed.d(h)?.max > ed.d(h)?.min)).map(control));
+  const routes = routesTable(n);
+  if (routes) body.append(el('h3', { title: 'HOME on the FM-1: what the sources (GLO > CONTROLS) do to this layer' }, 'ROUTES'), routes);
   sec.replaceChildren(head, body);
   if (focus === 'engine') eng.focus();
   else if (focus !== undefined) [...body.querySelectorAll('.ctl')].find((b) => b.handle === focus)?.querySelector('input, select')?.focus();
   markOff(n);
   if (ed.state) showState(ed.state);
 }
+// a layer's routes, as HOME's grid: its targets down, the sources across, each cell an amount (-100 .. 100 %, empty
+// or 0: none). Typed in, or the wheel (5 a step, shift: 1)
+function routesTable(n) {
+  const r = ed.routes[n];
+  if (!r || !r.rows.length || !r.cols.length) return null;
+  const head = el('tr', {}, el('th', {}), ...r.cols.map((s) => el('th', { title: `source ${TSX.SOURCES[s]}` }, TSX.SOURCES[s] ?? `#${s}`)));
+  const rows = r.rows.map((row) => el('tr', {}, el('th', { class: 'row' }, row.label), ...r.cols.map((s) => {
+    const h = TSX.H.cell(n, s, row.t);
+    const input = el('input', { type: 'text', inputmode: 'numeric', 'aria-label': `${TSX.SOURCES[s]} to ${row.label}`,
+      title: `${TSX.SOURCES[s]} → ${row.label}: -100 .. 100 % (empty: none)` });
+    const setTo = (v) => { touched.set(h, Date.now()); ed.set(h, Math.max(-100, Math.min(100, Math.round(v)))); };
+    input.addEventListener('change', () => {
+      const t = input.value.trim().replace('%', ''), v = t === '' ? 0 : Number(t);
+      if (Number.isFinite(v)) setTo(v); else { say(`${row.label}: a number, -100 .. 100`, 'bad'); c.show(true); }
+    });
+    input.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      setTo((ed.value(h) ?? 0) + (e.shiftKey ? 1 : 5) * (e.deltaY < 0 || e.deltaX < 0 ? 1 : -1));
+    }, { passive: false });
+    const c = {
+      show(force = false) {
+        const v = ed.value(h) ?? 0;
+        if (!force && (document.activeElement === input || Date.now() - (touched.get(h) ?? 0) < 500)) return;
+        input.value = v ? String(v) : '';
+        input.classList.toggle('on', v !== 0);
+      },
+      text() {},
+    };
+    (ctls.get(h) ?? ctls.set(h, new Set()).get(h)).add(c);
+    input.addEventListener('blur', () => c.show(true));
+    c.show(true);
+    input.ctl = c; input.handle = h;
+    return el('td', {}, input);
+  })));
+  return el('table', { class: 'routes' }, head, ...rows);
+}
+
 // (an engine change: the layer is built again when its knobs are described again, the 'layer' event)
 function markOff(n) {
   const sec = $(`layer-${n}`);
