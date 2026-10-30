@@ -210,7 +210,9 @@ export class Editor {
     const rows = [];
     let cols = [], total = 1;
     while (rows.length < total) {
-      const r = TSX.parseRoutes(await this.link.ok(CMD.ROUTES, [n, rows.length], prio, 'ROUTES'));
+      const q = await this.link.request(CMD.ROUTES, [n, rows.length], prio);
+      if (q.status !== 'OK') break;                // (a typhoon from before 2026-10-30: no routes)
+      const r = TSX.parseRoutes(q.data);
       total = r.rows;
       cols = r.cols;
       if (!r.list.length) break;
