@@ -42,7 +42,7 @@ The version is in `VERSION` (every build carries it: the header at power-on, Sys
   tilt. LFO is a sine at RATE whose depth is set by how far VIB CC is from CENTRE, for example the re.corder's
   rotation. Factory presets 28 PANFLUTE_TEC (his settings) and 29 PANFLUTE_ART (the re.corder). PERFORMANCE shows
   each core in its own column.
-- **Since 0.4:** the controls (`notes/05-controls.md`). Breath is just a controller: the sources BEND and A .. D are
+- **0.5:** the controls (`notes/05-controls.md`). Breath is just a controller: the sources BEND and A .. D are
   set once in GLO → CONTROLS, each with its curve, SMOOTH and OVER (AO .. DO: a source's top end, for an overblow).
   Each layer's ROUTES (HOME) send them to its targets, one to many: its level, pitch, pan, its engine's EXCITE (what
   breath moved in it) and the knobs that may move while playing. No engine reads breath by itself any more:
